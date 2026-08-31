@@ -92,6 +92,25 @@ async function callStockSheetAgent(pathSegment, { method = 'GET', body } = {}) {
   return data;
 }
 
+// PROXY to everest-plunge-pipely-xero-agent — for the final-invoice
+// action. Same reasoning as above: this app's own API key, browser never
+// sees it.
+async function callPipelyXeroAgent(pathSegment, { method = 'GET', body } = {}) {
+  if (!process.env.PIPELY_XERO_AGENT_URL) throw new Error('PIPELY_XERO_AGENT_URL is not configured.');
+  const res = await fetch(`${process.env.PIPELY_XERO_AGENT_URL}${pathSegment}`, {
+    method,
+    headers: {
+      'x-api-key': process.env.PIPELY_XERO_AGENT_API_KEY,
+      ...(body ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data.error || `Pipely-Xero agent error ${res.status}`);
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // API — read endpoints available to both roles, write endpoints ops-only.
 // ---------------------------------------------------------------------------
@@ -130,6 +149,48 @@ app.post('/api/log-sold-deal', requireRole('ops'), async (req, res) => {
 app.post('/api/mark-order-sent', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/mark-order-sent', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/mark-batch-arrived', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/mark-batch-arrived', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/products-to-order', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/products-to-order'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/mark-order-placed', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/mark-order-placed', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/mark-final-payment-received', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/mark-final-payment-received', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Talks to pipely-xero-agent, not the stock sheet agent — this is the one
+// action here that creates a real Xero invoice.
+app.post('/api/create-final-invoice', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/create-final-invoice', { method: 'POST', body: req.body }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }

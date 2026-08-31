@@ -63,6 +63,22 @@
         </label>
       </div>
       <div class="grid">
+        <label>Allocation
+          <select id="allocation">
+            <option value="">— pick one —</option>
+            <option value="On Shore">On Shore — ships now</option>
+            <option value="On Water">On Water — incoming batch</option>
+            <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
+          </select>
+        </label>
+        <label>Batch reference <small>(if On Water)</small>
+          <input type="text" id="batchReference" placeholder="e.g. Batch 12">
+        </label>
+      </div>
+      <div class="grid">
+        <label>Expected date <small>(ETA, if On Water)</small>
+          <input type="date" id="expectedDate">
+        </label>
         <label>Source
           <select id="source">
             <option>Manual</option>
@@ -70,10 +86,10 @@
             <option>Shopify</option>
           </select>
         </label>
-        <label>Notes
-          <input type="text" id="notes">
-        </label>
       </div>
+      <label>Notes
+        <input type="text" id="notes">
+      </label>
       <button type="submit">Log sold deal</button>
       <p id="deal-result"></p>
     </form>
@@ -82,11 +98,35 @@
   <section>
     <h3>Recent Orders</h3>
     <button id="refresh-log" class="secondary outline">Refresh</button>
+    <div style="overflow-x:auto">
     <table id="log-table">
       <thead>
-        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Stock Check</th><th>Deposit</th><th>Sent?</th><th>Action</th></tr>
+        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Status</th><th>Deposit</th><th>Final Payment</th><th>Action</th></tr>
       </thead>
       <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <h3>Batch Arrived</h3>
+    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch Stock Overview's In Stock count — do that separately in the sheet.</small></p>
+    <div class="inline-form">
+      <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
+      <button id="mark-arrived-btn">Mark batch arrived</button>
+    </div>
+    <p id="arrived-result"></p>
+  </section>
+
+  <section>
+    <h3>Products To Order</h3>
+    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order.</small></p>
+    <button id="refresh-to-order" class="secondary outline">Refresh</button>
+    <table id="to-order-table">
+      <thead>
+        <tr><th>SKU</th><th>Product</th><th>Total Qty</th><th>Orders</th><th>Action</th></tr>
+      </thead>
+      <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
   </section>
 
@@ -135,45 +175,135 @@ async function loadStockOverview() {
   }
 }
 
+// What action (if any) an order needs next, in order of the real
+// fulfillment sequence: waiting on stock -> ready, needs final invoice ->
+// invoiced, needs payment confirmed -> paid, ready to physically ship.
+function actionForEntry(e) {
+  const sent = e['Order Sent Date'];
+  if (sent) return `Sent ${sent} (${e['Courier'] || 'no courier'} ${e['Tracking #'] || ''})`;
+
+  const paidInFull = e['Deposit Status'] === 'Paid in full';
+  const finalPaid = e['Final Payment Status'] === 'Paid';
+  const finalInvoiced = e['Final Payment Status'] === 'Invoiced';
+
+  if (paidInFull || finalPaid) {
+    return `<button class="mark-sent" data-order="${e['Order ID']}">Mark sent…</button>`;
+  }
+  if (finalInvoiced) {
+    return `<button class="mark-paid" data-order="${e['Order ID']}">Mark payment received</button>`;
+  }
+  if (e['Status'] === 'Ready to organise') {
+    return `<button class="send-final" data-order="${e['Order ID']}" data-ref="${e['External Ref'] || ''}">Send final invoice</button>`;
+  }
+  return '<span style="color:var(--pico-muted-color)">Waiting on stock</span>';
+}
+
 async function loadAutomationLog() {
   const tbody = document.querySelector('#log-table tbody');
   try {
     const data = await api('/api/automation-log');
     const entries = (data.entries || []).slice().reverse();
     if (!entries.length) { tbody.innerHTML = '<tr><td colspan="8">No orders logged yet.</td></tr>'; return; }
-    tbody.innerHTML = entries.map((e) => {
-      const statusClass = e['Stock Check']?.startsWith('OK') ? 'ok' : e['Stock Check']?.startsWith('SHORT') ? 'short' : '';
-      const sent = e['Order Sent Date'];
-      const action = sent
-        ? `Sent ${e['Order Sent Date']} (${e['Courier'] || 'no courier'} ${e['Tracking #'] || ''})`
-        : `<button class="mark-sent" data-order="${e['Order ID']}">Mark sent…</button>`;
-      return `<tr>
+    tbody.innerHTML = entries.map((e) => `<tr>
         <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
-        <td>${e['Quantity']}</td><td class="status ${statusClass}">${e['Stock Check']}</td>
-        <td>${e['Deposit Status']}</td><td>${sent ? '✅' : '—'}</td><td>${action}</td>
-      </tr>`;
-    }).join('');
+        <td>${e['Quantity']}</td><td>${e['Status'] || ''}</td>
+        <td>${e['Deposit Status']}</td><td>${e['Final Payment Status'] || '—'}</td>
+        <td>${actionForEntry(e)}</td>
+      </tr>`).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
   }
 }
 
 document.querySelector('#log-table').addEventListener('click', async (ev) => {
-  if (!ev.target.classList.contains('mark-sent')) return;
   const orderId = ev.target.dataset.order;
-  const courier = prompt('Courier name?');
-  if (courier === null) return;
-  const trackingNumber = prompt('Tracking number?') || '';
+  if (!orderId) return;
+
   try {
-    await api('/api/mark-order-sent', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId, courier, trackingNumber })
-    });
+    if (ev.target.classList.contains('mark-sent')) {
+      const courier = prompt('Courier name?');
+      if (courier === null) return;
+      const trackingNumber = prompt('Tracking number?') || '';
+      await api('/api/mark-order-sent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId, courier, trackingNumber })
+      });
+    } else if (ev.target.classList.contains('mark-paid')) {
+      if (!confirm(`Confirm final payment for order ${orderId} has actually cleared in Xero?`)) return;
+      await api('/api/mark-final-payment-received', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId })
+      });
+    } else if (ev.target.classList.contains('send-final')) {
+      const ref = ev.target.dataset.ref;
+      if (!ref) { alert('This order has no linked Pipely deal (External Ref) — cannot send a final invoice automatically for it.'); return; }
+      if (!confirm(`Send the final payment invoice for order ${orderId}?`)) return;
+      await api('/api/create-final-invoice', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opportunityId: ref })
+      });
+    } else {
+      return;
+    }
     loadAutomationLog();
   } catch (err) {
     alert('Failed: ' + err.message);
   }
 });
+
+async function loadProductsToOrder() {
+  const tbody = document.querySelector('#to-order-table tbody');
+  try {
+    const data = await api('/api/products-to-order');
+    const products = data.products || [];
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="5">Nothing pending.</td></tr>'; return; }
+    tbody.innerHTML = products.map((p) => `
+      <tr>
+        <td>${p.sku}</td><td>${p.product}</td><td><strong>${p.totalQuantity}</strong></td>
+        <td>${p.orderIds.join(', ')}</td>
+        <td><button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button></td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+document.querySelector('#to-order-table').addEventListener('click', async (ev) => {
+  if (!ev.target.classList.contains('mark-ordered')) return;
+  const orderIds = ev.target.dataset.orders.split(',').filter(Boolean);
+  try {
+    for (const orderId of orderIds) {
+      await api('/api/mark-order-placed', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId })
+      });
+    }
+    loadProductsToOrder();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+});
+
+$('mark-arrived-btn').addEventListener('click', async () => {
+  const result = $('arrived-result');
+  const batchReference = $('arrivedBatchRef').value.trim();
+  if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
+  result.textContent = 'Working…';
+  try {
+    const data = await api('/api/mark-batch-arrived', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference })
+    });
+    result.textContent = data.flippedCount
+      ? `Flipped ${data.flippedCount} order(s) to "Ready to organise": ${data.flipped.map((f) => f.orderId).join(', ')}`
+      : 'No orders were waiting on that batch reference.';
+    loadAutomationLog();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+$('refresh-to-order').addEventListener('click', loadProductsToOrder);
 
 $('deal-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -191,6 +321,9 @@ $('deal-form').addEventListener('submit', async (ev) => {
         deliveryAddress: $('deliveryAddress').value,
         dealValue: $('dealValue').value ? Number($('dealValue').value) : undefined,
         depositStatus: $('depositStatus').value,
+        allocation: $('allocation').value,
+        batchReference: $('batchReference').value,
+        expectedDate: $('expectedDate').value,
         source: $('source').value,
         notes: $('notes').value
       })
@@ -208,6 +341,7 @@ $('refresh-log').addEventListener('click', loadAutomationLog);
 
 loadStockOverview();
 loadAutomationLog();
+loadProductsToOrder();
 </script>
 </body>
 </html>

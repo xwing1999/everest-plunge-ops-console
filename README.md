@@ -11,15 +11,32 @@ API this app already uses.
 A small Express app with two pages, both plain HTML/CSS/JS — no build
 step, no framework:
 
-- **`/ops`** (Operations login) — log a sold deal, see recent orders, mark
-  an order sent (courier + tracking + date), view current stock.
+- **`/ops`** (Operations login) — log a sold deal (with allocation:
+  On Shore / On Water / Next Custom Order), mark a batch as arrived, work
+  the products-to-order shopping list, send/track final-payment invoices,
+  mark orders sent, view current stock.
 - **`/sales`** (Sales rep login) — read-only: check stock availability
   before quoting a deal, view current stock. Cannot log deals or mark
   orders sent — that route is rejected server-side even if guessed.
 
-This app holds **no Google or Xero credentials itself**. It only talks to
-`everest-plunge-stock-sheet-agent`'s API, which is the one thing that
-actually touches the spreadsheet. Deploy the stock sheet agent first.
+This app holds **no Google or Xero credentials itself**. It talks to
+`everest-plunge-stock-sheet-agent`'s API (the one thing that actually
+touches the spreadsheet) and, for the "send final invoice" action only,
+to `everest-plunge-pipely-xero-agent`'s API. Deploy both of those first.
+
+## The fulfillment sequence, added 2026-08-31
+
+Each order in "Recent Orders" shows one action at a time, following the
+real sequence: **waiting on stock** → (once "Batch Arrived" flips it, or
+it was On Shore from the start) **send final invoice** → **mark payment
+received** → **mark sent**. The last two steps are a real gate, not just
+UI — `everest-plunge-stock-sheet-agent` refuses to let an order be marked
+sent until its final payment is confirmed paid (or it was paid in full at
+checkout, like Shopify orders), enforced server-side.
+
+"Send final invoice" only works for orders with a linked Pipely deal
+(shown as blank if there isn't one) — it calls
+`everest-plunge-pipely-xero-agent`, which creates the real Xero invoice.
 
 ## Auth
 
@@ -34,7 +51,8 @@ isn't true.
 1. Deploy `everest-plunge-stock-sheet-agent` first (see its own README) —
    this app is useless without it.
 2. Fill in `STOCK_SHEET_AGENT_URL`/`STOCK_SHEET_AGENT_API_KEY` pointing at
-   that deployed service.
+   that deployed service, and `PIPELY_XERO_AGENT_URL`/`PIPELY_XERO_AGENT_API_KEY`
+   for the final-invoice action.
 3. Pick real values for `OPS_USERNAME`/`OPS_PASSWORD` and
    `SALES_USERNAME`/`SALES_PASSWORD` — don't leave any blank, an unset
    password is treated as "this role is disabled", not "no password
