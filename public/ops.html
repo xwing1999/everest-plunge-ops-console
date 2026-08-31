@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Operations Console</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  .status { font-size: 0.9em; }
+  .status.ok { color: #15803d; }
+  .status.short { color: #b45309; }
+  .status.err { color: #b91c1c; }
+  table { font-size: 0.92em; }
+  .inline-form { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .inline-form input { width: auto; margin: 0; padding: 0.3rem 0.5rem; }
+  header nav a { margin-right: 1rem; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul><li><a href="/sales">Sales rep view →</a></li></ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <section>
+    <h3>Log a Sold Deal</h3>
+    <form id="deal-form">
+      <div class="grid">
+        <label>Customer name*
+          <input type="text" id="customerName" required>
+        </label>
+        <label>Email
+          <input type="email" id="email">
+        </label>
+      </div>
+      <div class="grid">
+        <label>Product (SKU)
+          <select id="sku"><option value="">— loading stock —</option></select>
+        </label>
+        <label>Quantity
+          <input type="number" id="quantity" min="1" value="1">
+        </label>
+      </div>
+      <label>Delivery address
+        <input type="text" id="deliveryAddress">
+      </label>
+      <div class="grid">
+        <label>Deal value (NZD)
+          <input type="number" id="dealValue" step="0.01">
+        </label>
+        <label>Deposit status
+          <select id="depositStatus">
+            <option>Not yet invoiced</option>
+            <option>Deposit invoiced</option>
+            <option>Deposit paid</option>
+            <option>Paid in full</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid">
+        <label>Source
+          <select id="source">
+            <option>Manual</option>
+            <option>Pipely</option>
+            <option>Shopify</option>
+          </select>
+        </label>
+        <label>Notes
+          <input type="text" id="notes">
+        </label>
+      </div>
+      <button type="submit">Log sold deal</button>
+      <p id="deal-result"></p>
+    </form>
+  </section>
+
+  <section>
+    <h3>Recent Orders</h3>
+    <button id="refresh-log" class="secondary outline">Refresh</button>
+    <table id="log-table">
+      <thead>
+        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Stock Check</th><th>Deposit</th><th>Sent?</th><th>Action</th></tr>
+      </thead>
+      <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>Stock Overview</h3>
+    <table id="stock-table">
+      <thead>
+        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>In Stock</th><th>Reserved</th><th>Available</th><th>New Orders</th><th>Balance</th></tr>
+      </thead>
+      <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+let stockProducts = [];
+
+async function loadStockOverview() {
+  const tbody = document.querySelector('#stock-table tbody');
+  try {
+    const data = await api('/api/stock-overview');
+    stockProducts = data.products || [];
+    tbody.innerHTML = stockProducts.map((p) => `
+      <tr>
+        <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
+        <td>${p.inStock}</td><td>${p.reserved}</td><td>${p.available}</td>
+        <td>${p.newOrders}</td><td><strong>${p.balance}</strong></td>
+      </tr>`).join('');
+
+    const skuSelect = $('sku');
+    skuSelect.innerHTML = '<option value="">— select a product —</option>' +
+      stockProducts.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize}) — ${p.balance} available</option>`).join('') +
+      '<option value="__other__">Other / not listed</option>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadAutomationLog() {
+  const tbody = document.querySelector('#log-table tbody');
+  try {
+    const data = await api('/api/automation-log');
+    const entries = (data.entries || []).slice().reverse();
+    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="8">No orders logged yet.</td></tr>'; return; }
+    tbody.innerHTML = entries.map((e) => {
+      const statusClass = e['Stock Check']?.startsWith('OK') ? 'ok' : e['Stock Check']?.startsWith('SHORT') ? 'short' : '';
+      const sent = e['Order Sent Date'];
+      const action = sent
+        ? `Sent ${e['Order Sent Date']} (${e['Courier'] || 'no courier'} ${e['Tracking #'] || ''})`
+        : `<button class="mark-sent" data-order="${e['Order ID']}">Mark sent…</button>`;
+      return `<tr>
+        <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
+        <td>${e['Quantity']}</td><td class="status ${statusClass}">${e['Stock Check']}</td>
+        <td>${e['Deposit Status']}</td><td>${sent ? '✅' : '—'}</td><td>${action}</td>
+      </tr>`;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+document.querySelector('#log-table').addEventListener('click', async (ev) => {
+  if (!ev.target.classList.contains('mark-sent')) return;
+  const orderId = ev.target.dataset.order;
+  const courier = prompt('Courier name?');
+  if (courier === null) return;
+  const trackingNumber = prompt('Tracking number?') || '';
+  try {
+    await api('/api/mark-order-sent', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId, courier, trackingNumber })
+    });
+    loadAutomationLog();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+});
+
+$('deal-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const result = $('deal-result');
+  result.textContent = 'Logging…';
+  const skuValue = $('sku').value === '__other__' ? '' : $('sku').value;
+  try {
+    const data = await api('/api/log-sold-deal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: $('customerName').value,
+        email: $('email').value,
+        sku: skuValue,
+        quantity: Number($('quantity').value) || undefined,
+        deliveryAddress: $('deliveryAddress').value,
+        dealValue: $('dealValue').value ? Number($('dealValue').value) : undefined,
+        depositStatus: $('depositStatus').value,
+        source: $('source').value,
+        notes: $('notes').value
+      })
+    });
+    result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}`;
+    $('deal-form').reset();
+    loadAutomationLog();
+    loadStockOverview();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+$('refresh-log').addEventListener('click', loadAutomationLog);
+
+loadStockOverview();
+loadAutomationLog();
+</script>
+</body>
+</html>

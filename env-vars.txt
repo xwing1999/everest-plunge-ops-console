@@ -1,0 +1,20 @@
+# Reference only — Railway does NOT read this file. Paste real values into
+# Railway's Variables tab directly. Never put real secrets in this file or
+# commit them to git.
+
+# Operations login — full access (log sold deals, mark orders sent, see
+# the automation log). Pick your own values, share only with ops staff.
+OPS_USERNAME=
+OPS_PASSWORD=
+
+# Sales rep login — read-only (stock overview + availability check). Share
+# with reps; they cannot log deals or mark orders sent with this login.
+SALES_USERNAME=
+SALES_PASSWORD=
+
+# The stock sheet agent this console talks to — its URL and API key. This
+# console holds no Google/Xero credentials itself, only this one.
+STOCK_SHEET_AGENT_URL=
+STOCK_SHEET_AGENT_API_KEY=
+
+PORT=3011

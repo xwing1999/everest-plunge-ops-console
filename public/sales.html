@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Sales View</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  table { font-size: 0.92em; }
+  #avail-result { font-weight: bold; }
+  #avail-result.ok { color: #15803d; }
+  #avail-result.short { color: #b45309; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Sales View</strong></li></ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <section>
+    <h3>Check availability before you quote</h3>
+    <div class="grid">
+      <label>Product
+        <select id="sku"><option value="">— loading stock —</option></select>
+      </label>
+      <label>Quantity
+        <input type="number" id="quantity" min="1" value="1">
+      </label>
+    </div>
+    <button id="check-btn">Check availability</button>
+    <p id="avail-result"></p>
+  </section>
+
+  <section>
+    <h3>Stock Overview</h3>
+    <table id="stock-table">
+      <thead>
+        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>Balance available</th></tr>
+      </thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function loadStockOverview() {
+  const tbody = document.querySelector('#stock-table tbody');
+  try {
+    const data = await api('/api/stock-overview');
+    const products = data.products || [];
+    tbody.innerHTML = products.map((p) => `
+      <tr><td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td><td><strong>${p.balance}</strong></td></tr>
+    `).join('');
+
+    const skuSelect = $('sku');
+    skuSelect.innerHTML = '<option value="">— select a product —</option>' +
+      products.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize})</option>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+$('check-btn').addEventListener('click', async () => {
+  const result = $('avail-result');
+  result.className = '';
+  const sku = $('sku').value;
+  const quantity = Number($('quantity').value) || 1;
+  if (!sku) { result.textContent = 'Pick a product first.'; return; }
+  result.textContent = 'Checking…';
+  try {
+    const data = await api('/api/check-availability', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sku, quantity })
+    });
+    if (!data.found) {
+      result.textContent = data.reason;
+    } else if (data.fulfillable) {
+      result.className = 'ok';
+      result.textContent = `✅ Fulfillable now — ${data.balance} available (${data.batchLabel})`;
+    } else {
+      result.className = 'short';
+      result.textContent = `⚠️ Short by ${data.shortfall} — only ${data.balance} available (${data.batchLabel})`;
+    }
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+loadStockOverview();
+</script>
+</body>
+</html>
