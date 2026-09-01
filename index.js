@@ -130,6 +130,24 @@ app.post('/api/check-availability', requireRole('sales'), async (req, res) => {
   }
 });
 
+// Read-only mirror of the real spreadsheet's batch tabs (added 2026-09-01)
+// — see stock-sheet-agent's README for why these are read-only.
+app.get('/api/batches', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/batches'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/delivered-orders', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/delivered-orders'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/api/automation-log', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/automation-log'));
@@ -225,6 +243,15 @@ app.get('/', requireRole('sales'), (req, res) => {
 });
 app.get('/ops', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops.html'));
+});
+app.get('/ops/stock', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-stock.html'));
+});
+app.get('/ops/batches', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-batches.html'));
+});
+app.get('/ops/completed', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-completed.html'));
 });
 app.get('/sales', requireRole('sales'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sales.html'));

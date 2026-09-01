@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Stock on Shore</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  table { font-size: 0.92em; }
+  header nav a { margin-right: 1rem; }
+  .neg { color: #b91c1c; font-weight: bold; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <h3>Stock on Shore — Silverdale</h3>
+  <p><small>Physically on hand right now. "Available" and "Balance" are computed here by summing every batch reservation and new-order column in the sheet — not read directly from the sheet's own Available/Balance cells, which only ever tracked the first batch column and go stale as new batches are added. A red/negative balance means more is committed than physically exists — check Products To Order on the Dashboard.</small></p>
+  <button id="refresh-btn" class="secondary outline">Refresh</button>
+  <table id="stock-table">
+    <thead>
+      <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>In Stock</th><th>Reserved (all batches)</th><th>Available</th><th>New Orders</th><th>Balance</th></tr>
+    </thead>
+    <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+  </table>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function loadStock() {
+  const tbody = document.querySelector('#stock-table tbody');
+  try {
+    const data = await api('/api/stock-overview');
+    const products = data.products || [];
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="8">No products found.</td></tr>'; return; }
+    tbody.innerHTML = products.map((p) => `
+      <tr>
+        <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
+        <td>${p.inStock}</td><td>${p.reserved}</td>
+        <td class="${p.available < 0 ? 'neg' : ''}">${p.available}</td>
+        <td>${p.newOrders}</td>
+        <td class="${p.balance < 0 ? 'neg' : ''}"><strong>${p.balance}</strong></td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+$('refresh-btn').addEventListener('click', loadStock);
+loadStock();
+</script>
+</body>
+</html>

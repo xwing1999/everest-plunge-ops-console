@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Completed Orders</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  table { font-size: 0.92em; }
+  header nav a { margin-right: 1rem; }
+  .notes { color: var(--pico-muted-color); font-size: 0.85em; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <section>
+    <h3>Completed Orders — logged through this console</h3>
+    <p><small>Orders marked sent via the Dashboard's "Book &amp; mark sent" action, since this console went live.</small></p>
+    <button id="refresh-logged-btn" class="secondary outline">Refresh</button>
+    <table id="logged-table">
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Courier</th><th>Tracking #</th><th>Sent</th></tr></thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h3>Delivered — historical record from the spreadsheet</h3>
+    <p><small>Read-only mirror of the sheet's own "DELIVERED FIRST ORDERS" tab — everything delivered before this console existed. Separate list from the one above; not merged, since these predate the Automation Log and aren't the same records.</small></p>
+    <button id="refresh-delivered-btn" class="secondary outline">Refresh</button>
+    <table id="delivered-table">
+      <thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th></tr></thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function loadLogged() {
+  const tbody = document.querySelector('#logged-table tbody');
+  try {
+    const data = await api('/api/automation-log');
+    const sent = (data.entries || []).filter((e) => e['Order Sent Date']);
+    if (!sent.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing marked sent yet.</td></tr>'; return; }
+    tbody.innerHTML = sent.map((e) => `
+      <tr>
+        <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
+        <td>${e['Courier'] || '—'}</td><td>${e['Tracking #'] || '—'}</td><td>${e['Order Sent Date']}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+async function loadDelivered() {
+  const tbody = document.querySelector('#delivered-table tbody');
+  try {
+    const data = await api('/api/delivered-orders');
+    const entries = data.entries || [];
+    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing found.</td></tr>'; return; }
+    tbody.innerHTML = entries.map((e) => `
+      <tr>
+        <td>${e.invoiceNo}</td><td>${e.invoiceDate}</td><td>${e.customerName}</td>
+        <td>${e.product}${e.notes.length ? `<div class="notes">${e.notes.join(' · ')}</div>` : ''}</td>
+        <td>${e.invoiceAmount}</td><td>${e.paymentStatus}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+$('refresh-logged-btn').addEventListener('click', loadLogged);
+$('refresh-delivered-btn').addEventListener('click', loadDelivered);
+loadLogged();
+loadDelivered();
+</script>
+</body>
+</html>

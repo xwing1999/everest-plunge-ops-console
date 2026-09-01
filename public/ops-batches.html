@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Batches</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  table { font-size: 0.92em; }
+  header nav a { margin-right: 1rem; }
+  .status { font-size: 0.9em; }
+  .status.ok { color: #15803d; }
+  .status.short { color: #b45309; }
+  .status.err { color: #b91c1c; }
+  details { border: 1px solid var(--pico-muted-border-color); border-radius: 6px; margin-bottom: 1rem; padding: 0.75rem 1rem; }
+  summary { cursor: pointer; font-weight: bold; }
+  .notes { color: var(--pico-muted-color); font-size: 0.85em; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <h3>Batches</h3>
+  <p><small>Read-only mirror of the real batch tabs in the spreadsheet — clean allocation view, exactly what's actually in the sheet. Nothing here is editable; fix client details directly in the sheet if something's wrong. ETA/countdown is set on the Dashboard's "Batch ETA" section and drives automatic final invoicing.</small></p>
+  <button id="refresh-btn" class="secondary outline">Refresh</button>
+  <div id="batches-body">Loading…</div>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+function daysUntilClient(dateStr) {
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const targetUTC = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  return Math.round((targetUTC - todayUTC) / msPerDay);
+}
+
+const FINAL_INVOICE_LEAD_DAYS = 7; // must match FINAL_INVOICE_LEAD_DAYS on pipely-xero-agent
+
+function etaBadge(eta) {
+  if (!eta) return '<span class="status short">No ETA set</span>';
+  const days = daysUntilClient(eta.eta);
+  if (days === null) return '<span class="status err">Invalid ETA</span>';
+  if (days < 0) return `<span class="status err">ETA ${eta.eta} — ${-days}d overdue</span>`;
+  if (days === 0) return `<span class="status short">ETA ${eta.eta} — arriving today</span>`;
+  if (days <= FINAL_INVOICE_LEAD_DAYS) return `<span class="status short">ETA ${eta.eta} — ${days}d, in invoice window</span>`;
+  return `<span class="status ok">ETA ${eta.eta} — ${days}d</span>`;
+}
+
+// Matches a real batch tab name (e.g. "BATCH 12") against batch-etas keys
+// (e.g. "Batch 12") case-insensitively — the two are typed independently
+// (one is a real sheet tab name, the other whatever ops types into the
+// Dashboard's Batch ETA field), so an exact-case match isn't guaranteed.
+function findEta(batchEtas, batchName) {
+  const key = Object.keys(batchEtas).find((k) => k.toLowerCase() === batchName.toLowerCase());
+  return key ? batchEtas[key] : null;
+}
+
+async function loadBatches() {
+  const body = $('batches-body');
+  try {
+    const [batchesData, etaData] = await Promise.all([api('/api/batches'), api('/api/batch-etas')]);
+    const batches = batchesData.batches || [];
+    const batchEtas = etaData.batchEtas || {};
+    if (!batches.length) { body.innerHTML = '<p>No batch tabs found.</p>'; return; }
+
+    body.innerHTML = batches.map((b) => {
+      const eta = findEta(batchEtas, b.name);
+      const totalValue = b.entries.reduce((sum, e) => sum + (Number((e.invoiceAmount || '').replace(/[^0-9.-]/g, '')) || 0), 0);
+      return `
+        <details ${b === batches[0] ? 'open' : ''}>
+          <summary>${b.name} — ${b.clientCount} client(s), $${totalValue.toLocaleString()} total — ${etaBadge(eta)}</summary>
+          <table>
+            <thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Type</th><th>Payment</th></tr></thead>
+            <tbody>${b.entries.map((e) => `
+              <tr>
+                <td>${e.invoiceNo}</td><td>${e.invoiceDate}</td><td>${e.customerName}</td>
+                <td>${e.product}${e.notes.length ? `<div class="notes">${e.notes.join(' · ')}</div>` : ''}</td>
+                <td>${e.invoiceAmount}</td><td>${e.invoiceType}</td>
+                <td class="${e.paymentStatus === 'Paid' ? 'status ok' : 'status short'}">${e.paymentStatus}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </details>`;
+    }).join('');
+  } catch (err) {
+    body.innerHTML = `<p>Failed to load: ${err.message}</p>`;
+  }
+}
+
+$('refresh-btn').addEventListener('click', loadBatches);
+loadBatches();
+</script>
+</body>
+</html>

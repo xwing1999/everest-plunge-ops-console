@@ -15,17 +15,38 @@
   .inline-form { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
   .inline-form input { width: auto; margin: 0; padding: 0.3rem 0.5rem; }
   header nav a { margin-right: 1rem; }
+  .ready-to-book {
+    border: 3px solid #b91c1c;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+    background: rgba(185, 28, 28, 0.06);
+  }
+  .ready-to-book h3 { color: #b91c1c; text-decoration: underline; margin-bottom: 0.5rem; }
+  .ready-to-book table { margin-bottom: 0; }
 </style>
 </head>
 <body>
 <header class="container">
   <nav>
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
-    <ul><li><a href="/sales">Sales rep view →</a></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
   </nav>
 </header>
 
 <main class="container">
+
+  <section class="ready-to-book">
+    <h3>⚠ READY TO BOOK — Pickup &amp; Delivery from Warehouse</h3>
+    <p><small>Paid in full (or final payment received) and not yet sent — nothing left blocking these except booking the courier.</small></p>
+    <div id="ready-to-book-body">Loading…</div>
+  </section>
 
   <section>
     <h3>Log a Sold Deal</h3>
@@ -213,6 +234,33 @@ function actionForEntry(e) {
   return '<span style="color:var(--pico-muted-color)">Waiting on stock</span>';
 }
 
+// Ready-to-book callout (added 2026-09-01) — Xavier: "a big box underlined
+// in red saying which jobs are ready to be booked for pick up and delivery
+// from the warehouse." Same paid/sent logic as actionForEntry above, just
+// filtered down and shown prominently rather than buried in the full order
+// table.
+async function loadReadyToBook() {
+  const box = $('ready-to-book-body');
+  try {
+    const data = await api('/api/automation-log');
+    const ready = (data.entries || []).filter((e) => {
+      if (e['Order Sent Date']) return false;
+      return e['Deposit Status'] === 'Paid in full' || e['Final Payment Status'] === 'Paid';
+    });
+    if (!ready.length) { box.innerHTML = '<p>Nothing waiting on booking right now.</p>'; return; }
+    box.innerHTML = `<table>
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Delivery Address</th><th>Action</th></tr></thead>
+      <tbody>${ready.map((e) => `<tr>
+        <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
+        <td>${e['Delivery Address'] || '—'}</td>
+        <td><button class="mark-sent" data-order="${e['Order ID']}">Book &amp; mark sent…</button></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  } catch (err) {
+    box.innerHTML = `<p>Failed to load: ${err.message}</p>`;
+  }
+}
+
 // Countdown to a container's arrival — mirrors pipely-xero-agent's
 // daysUntil() server-side, which is what actually decides when the final
 // invoice sweep fires. Kept in sync deliberately: this display should
@@ -261,7 +309,9 @@ async function loadAutomationLog() {
   }
 }
 
-document.querySelector('#log-table').addEventListener('click', async (ev) => {
+// Shared by #log-table and #ready-to-book-body — same order actions,
+// two different places they can be triggered from.
+async function handleOrderActionClick(ev) {
   const orderId = ev.target.dataset.order;
   if (!orderId) return;
 
@@ -292,10 +342,14 @@ document.querySelector('#log-table').addEventListener('click', async (ev) => {
       return;
     }
     loadAutomationLog();
+    loadReadyToBook();
   } catch (err) {
     alert('Failed: ' + err.message);
   }
-});
+}
+
+document.querySelector('#log-table').addEventListener('click', handleOrderActionClick);
+$('ready-to-book-body').addEventListener('click', handleOrderActionClick);
 
 async function loadProductsToOrder() {
   const tbody = document.querySelector('#to-order-table tbody');
@@ -422,6 +476,7 @@ loadStockOverview();
 loadAutomationLog();
 loadProductsToOrder();
 loadBatchEtas();
+loadReadyToBook();
 </script>
 </body>
 </html>
