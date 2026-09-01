@@ -92,11 +92,23 @@ async function loadBatches() {
 
     body.innerHTML = batches.map((b) => {
       const eta = findEta(batchEtas, b.name);
-      const totalValue = b.entries.reduce((sum, e) => sum + (Number((e.invoiceAmount || '').replace(/[^0-9.-]/g, '')) || 0), 0);
-      return `
-        <details ${b === batches[0] ? 'open' : ''}>
-          <summary>${b.name} — ${b.clientCount} client(s), $${totalValue.toLocaleString()} total — ${etaBadge(eta)}</summary>
-          <table>
+      const sourceTag = b.source === 'console'
+        ? '<span class="status ok">new — created via console</span>'
+        : '<span class="status short">legacy sheet tab</span>';
+
+      const table = b.source === 'console'
+        ? `<table>
+            <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Allocation</th><th>Value</th><th>Deposit</th><th>Final Payment</th></tr></thead>
+            <tbody>${b.entries.map((e) => `
+              <tr>
+                <td>${e.orderId}</td><td>${e.customerName}</td><td>${e.product}</td><td>${e.allocation}</td>
+                <td>${e.dealValue || '—'}</td>
+                <td class="${e.depositStatus === 'Paid in full' || e.depositStatus === 'Deposit paid' ? 'status ok' : 'status short'}">${e.depositStatus || '—'}</td>
+                <td>${e.finalPaymentStatus || '—'}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>`
+        : `<table>
             <thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Type</th><th>Payment</th></tr></thead>
             <tbody>${b.entries.map((e) => `
               <tr>
@@ -106,7 +118,12 @@ async function loadBatches() {
                 <td class="${e.paymentStatus === 'Paid' ? 'status ok' : 'status short'}">${e.paymentStatus}</td>
               </tr>`).join('')}
             </tbody>
-          </table>
+          </table>`;
+
+      return `
+        <details ${b === batches[0] ? 'open' : ''}>
+          <summary>${b.name} — ${b.clientCount} client(s) — ${sourceTag} — ${etaBadge(eta)}</summary>
+          ${table}
         </details>`;
     }).join('');
   } catch (err) {
