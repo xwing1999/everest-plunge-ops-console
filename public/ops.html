@@ -243,8 +243,16 @@ async function loadReadyToBook() {
   const box = $('ready-to-book-body');
   try {
     const data = await api('/api/automation-log');
+    // Both conditions required, per Xavier: "once the stock is verified as
+    // in the warehouse ready to book courier then it will go into the red
+    // box" — paid alone isn't enough (e.g. a full-payment order still
+    // allocated "On Water", not yet landed, shouldn't show as ready to
+    // book). "Ready to organise" (computed server-side by
+    // deriveOrderStatus) means Allocation is "On Shore" — actually
+    // sitting in the warehouse right now, not just paid for.
     const ready = (data.entries || []).filter((e) => {
       if (e['Order Sent Date']) return false;
+      if (e['Status'] !== 'Ready to organise') return false;
       return e['Deposit Status'] === 'Paid in full' || e['Final Payment Status'] === 'Paid';
     });
     if (!ready.length) { box.innerHTML = '<p>Nothing waiting on booking right now.</p>'; return; }
