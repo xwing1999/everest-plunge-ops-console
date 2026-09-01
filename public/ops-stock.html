@@ -29,13 +29,13 @@
 <main class="container">
 
   <h3>Stock on Shore — Silverdale</h3>
-  <p><small>Physically on hand right now. "Available" and "Balance" are computed here by summing every batch reservation and new-order column in the sheet — not read directly from the sheet's own Available/Balance cells, which only ever tracked the first batch column and go stale as new batches are added. A red/negative balance means more is committed than physically exists — check Products To Order on the Dashboard.</small></p>
+  <p><small>Physically in the warehouse right now — "Available"/"Balance" are against the landed batch only (In Stock minus that batch's reservations/new orders), matching the sheet's own original formula. The "Incoming (on the water)" column is separate — units already pre-committed against later batch shipments that haven't landed yet, so they don't reduce what's on shore today. A red/negative on-shore balance means more is committed against the CURRENT warehouse stock than physically exists — check Products To Order on the Dashboard.</small></p>
   <button id="refresh-btn" class="secondary outline">Refresh</button>
   <table id="stock-table">
     <thead>
-      <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>In Stock</th><th>Reserved (all batches)</th><th>Available</th><th>New Orders</th><th>Balance</th></tr>
+      <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>In Stock</th><th>Reserved (landed batch)</th><th>Available</th><th>New Orders</th><th>Balance (on shore)</th><th>Incoming (on the water)</th></tr>
     </thead>
-    <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+    <tbody><tr><td colspan="9">Loading…</td></tr></tbody>
   </table>
 
 </main>
@@ -55,7 +55,7 @@ async function loadStock() {
   try {
     const data = await api('/api/stock-overview');
     const products = data.products || [];
-    if (!products.length) { tbody.innerHTML = '<tr><td colspan="8">No products found.</td></tr>'; return; }
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="9">No products found.</td></tr>'; return; }
     tbody.innerHTML = products.map((p) => `
       <tr>
         <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
@@ -63,9 +63,10 @@ async function loadStock() {
         <td class="${p.available < 0 ? 'neg' : ''}">${p.available}</td>
         <td>${p.newOrders}</td>
         <td class="${p.balance < 0 ? 'neg' : ''}"><strong>${p.balance}</strong></td>
+        <td>${p.incoming || 0}</td>
       </tr>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9">Failed to load: ${err.message}</td></tr>`;
   }
 }
 
