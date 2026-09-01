@@ -11,6 +11,11 @@
   #avail-result { font-weight: bold; }
   #avail-result.ok { color: #15803d; }
   #avail-result.short { color: #b45309; }
+  .status { font-size: 0.9em; }
+  .status.ok { color: #15803d; }
+  .status.short { color: #b45309; }
+  .status.err { color: #b91c1c; }
+  .incoming-line { display: block; }
 </style>
 </head>
 <body>
@@ -39,11 +44,12 @@
 
   <section>
     <h3>Stock Overview</h3>
+    <p><small>"On shore" is what's physically in the Silverdale warehouse right now. "Incoming" is pre-committed against a shipment still on the water — not sellable from stock today, but tell the customer when it lands.</small></p>
     <table id="stock-table">
       <thead>
-        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>Balance available</th></tr>
+        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>On shore now</th><th>Incoming (on the water)</th></tr>
       </thead>
-      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+      <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
   </section>
 
@@ -59,20 +65,57 @@ async function api(path, options) {
   return data;
 }
 
+function daysUntilClient(dateStr) {
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const targetUTC = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  return Math.round((targetUTC - todayUTC) / msPerDay);
+}
+
+// Same case-insensitive batch-name matching used on /ops/batches — a
+// Stock Overview column header ("Batch 12") and whatever ops typed into
+// the Batch ETA form aren't guaranteed to match on case.
+function findEta(batchEtas, batchName) {
+  const key = Object.keys(batchEtas).find((k) => k.toLowerCase() === batchName.toLowerCase());
+  return key ? batchEtas[key] : null;
+}
+
+function incomingCell(breakdown, batchEtas) {
+  if (!breakdown || !breakdown.length) return '—';
+  return breakdown.map((b) => {
+    const eta = findEta(batchEtas, b.batch);
+    if (!eta) return `<span class="incoming-line">${b.quantity} on ${b.batch} <span class="status short">(no ETA set)</span></span>`;
+    const days = daysUntilClient(eta.eta);
+    const when = days === null ? '<span class="status err">invalid ETA</span>'
+      : days < 0 ? `<span class="status err">${eta.eta}, ${-days}d overdue</span>`
+      : days === 0 ? `<span class="status short">${eta.eta}, today</span>`
+      : `<span class="status ok">${eta.eta}, ~${days}d</span>`;
+    return `<span class="incoming-line">${b.quantity} on ${b.batch} — ${when}</span>`;
+  }).join('');
+}
+
 async function loadStockOverview() {
   const tbody = document.querySelector('#stock-table tbody');
   try {
-    const data = await api('/api/stock-overview');
-    const products = data.products || [];
+    const [stockData, etaData] = await Promise.all([api('/api/stock-overview'), api('/api/batch-etas')]);
+    const products = stockData.products || [];
+    const batchEtas = etaData.batchEtas || {};
     tbody.innerHTML = products.map((p) => `
-      <tr><td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td><td><strong>${p.balance}</strong></td></tr>
+      <tr>
+        <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
+        <td><strong>${p.balance}</strong></td>
+        <td>${incomingCell(p.incomingBreakdown, batchEtas)}</td>
+      </tr>
     `).join('');
 
     const skuSelect = $('sku');
     skuSelect.innerHTML = '<option value="">— select a product —</option>' +
       products.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize})</option>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5">Failed to load: ${err.message}</td></tr>`;
   }
 }
 

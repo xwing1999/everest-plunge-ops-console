@@ -217,7 +217,9 @@ app.post('/api/set-batch-eta', requireRole('ops'), async (req, res) => {
   }
 });
 
-app.get('/api/batch-etas', requireRole('ops'), async (_req, res) => {
+// 'sales', not 'ops'-only (added 2026-09-01) — reps need to see when
+// incoming stock actually arrives, not just ops.
+app.get('/api/batch-etas', requireRole('sales'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/batch-etas'));
   } catch (err) {
