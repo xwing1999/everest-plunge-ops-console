@@ -101,9 +101,9 @@
     <div style="overflow-x:auto">
     <table id="log-table">
       <thead>
-        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Status</th><th>Deposit</th><th>Final Payment</th><th>Action</th></tr>
+        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Status</th><th>Deposit</th><th>Final Payment</th><th>Ship ETA <small>(container arrival)</small></th><th>Action</th></tr>
       </thead>
-      <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+      <tbody><tr><td colspan="9">Loading…</td></tr></tbody>
     </table>
     </div>
   </section>
@@ -116,6 +116,21 @@
       <button id="mark-arrived-btn">Mark batch arrived</button>
     </div>
     <p id="arrived-result"></p>
+  </section>
+
+  <section>
+    <h3>Batch ETA (Countdown)</h3>
+    <p><small>One arrival ETA per shipment — every order allocated to that batch shares this countdown (matches the real spreadsheet's per-batch ETA). The final 50% invoice fires automatically once a batch is within its lead-time window — see Recent Orders below.</small></p>
+    <div class="inline-form">
+      <input type="text" id="etaBatchRef" placeholder="e.g. Batch 12">
+      <input type="date" id="etaDate">
+      <button id="set-eta-btn">Set ETA</button>
+    </div>
+    <p id="eta-result"></p>
+    <table id="batch-eta-table">
+      <thead><tr><th>Batch</th><th>ETA</th><th>Last Updated</th></tr></thead>
+      <tbody><tr><td colspan="3">Loading…</td></tr></tbody>
+    </table>
   </section>
 
   <section>
@@ -198,20 +213,51 @@ function actionForEntry(e) {
   return '<span style="color:var(--pico-muted-color)">Waiting on stock</span>';
 }
 
+// Countdown to a container's arrival — mirrors pipely-xero-agent's
+// daysUntil() server-side, which is what actually decides when the final
+// invoice sweep fires. Kept in sync deliberately: this display should
+// never show "invoice window" for a date the sweep wouldn't also act on.
+function daysUntilClient(dateStr) {
+  const target = new Date(dateStr);
+  if (isNaN(target.getTime())) return null;
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const targetUTC = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
+  return Math.round((targetUTC - todayUTC) / msPerDay);
+}
+
+const FINAL_INVOICE_LEAD_DAYS = 7; // must match FINAL_INVOICE_LEAD_DAYS on pipely-xero-agent
+
+// Read-only here — the ETA itself is set per batch in the "Batch ETA"
+// section above, not per order. This just shows what each order inherits
+// from its batch via "Batch Reference".
+function shipEtaCell(e) {
+  const date = e['Ship ETA'];
+  if (!date) return `<span style="color:var(--pico-muted-color)">${e['Batch Reference'] ? 'No ETA set for ' + e['Batch Reference'] : 'No batch'}</span>`;
+  const days = daysUntilClient(date);
+  if (days === null) return `<span class="status err">Invalid ETA</span>`;
+  if (days < 0) return `<div>${date}</div><div class="status err">${-days}d overdue — will invoice on next sweep</div>`;
+  if (days === 0) return `<div>${date}</div><div class="status short">Arriving today</div>`;
+  if (days <= FINAL_INVOICE_LEAD_DAYS) return `<div>${date}</div><div class="status short">${days}d — in invoice window</div>`;
+  return `<div>${date}</div><div class="status ok">${days}d</div>`;
+}
+
 async function loadAutomationLog() {
   const tbody = document.querySelector('#log-table tbody');
   try {
     const data = await api('/api/automation-log');
     const entries = (data.entries || []).slice().reverse();
-    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="8">No orders logged yet.</td></tr>'; return; }
+    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="9">No orders logged yet.</td></tr>'; return; }
     tbody.innerHTML = entries.map((e) => `<tr>
         <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
         <td>${e['Quantity']}</td><td>${e['Status'] || ''}</td>
         <td>${e['Deposit Status']}</td><td>${e['Final Payment Status'] || '—'}</td>
+        <td>${shipEtaCell(e)}</td>
         <td>${actionForEntry(e)}</td>
       </tr>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9">Failed to load: ${err.message}</td></tr>`;
   }
 }
 
@@ -303,6 +349,38 @@ $('mark-arrived-btn').addEventListener('click', async () => {
   }
 });
 
+async function loadBatchEtas() {
+  const tbody = document.querySelector('#batch-eta-table tbody');
+  try {
+    const data = await api('/api/batch-etas');
+    const rows = Object.entries(data.batchEtas || {});
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="3">No batch ETAs set yet.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(([batchReference, v]) => `
+      <tr><td>${batchReference}</td><td>${v.eta}</td><td>${new Date(v.updatedAt).toLocaleString()}</td></tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+$('set-eta-btn').addEventListener('click', async () => {
+  const result = $('eta-result');
+  const batchReference = $('etaBatchRef').value.trim();
+  const date = $('etaDate').value;
+  if (!batchReference || !date) { result.textContent = 'Enter a batch reference and pick a date first.'; return; }
+  result.textContent = 'Working…';
+  try {
+    await api('/api/set-batch-eta', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference, date })
+    });
+    result.textContent = `Set ETA for ${batchReference}: ${date}. Any order on this batch within ${FINAL_INVOICE_LEAD_DAYS} days will be final-invoiced automatically on the next sweep.`;
+    loadBatchEtas();
+    loadAutomationLog();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
 $('refresh-to-order').addEventListener('click', loadProductsToOrder);
 
 $('deal-form').addEventListener('submit', async (ev) => {
@@ -342,6 +420,7 @@ $('refresh-log').addEventListener('click', loadAutomationLog);
 loadStockOverview();
 loadAutomationLog();
 loadProductsToOrder();
+loadBatchEtas();
 </script>
 </body>
 </html>

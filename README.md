@@ -12,9 +12,10 @@ A small Express app with two pages, both plain HTML/CSS/JS — no build
 step, no framework:
 
 - **`/ops`** (Operations login) — log a sold deal (with allocation:
-  On Shore / On Water / Next Custom Order), mark a batch as arrived, work
-  the products-to-order shopping list, send/track final-payment invoices,
-  mark orders sent, view current stock.
+  On Shore / On Water / Next Custom Order), mark a batch as arrived, set a
+  batch's container ETA (drives automatic final invoicing — see below),
+  work the products-to-order shopping list, send/track final-payment
+  invoices, mark orders sent, view current stock.
 - **`/sales`** (Sales rep login) — read-only: check stock availability
   before quoting a deal, view current stock. Cannot log deals or mark
   orders sent — that route is rejected server-side even if guessed.
@@ -37,6 +38,20 @@ checkout, like Shopify orders), enforced server-side.
 "Send final invoice" only works for orders with a linked Pipely deal
 (shown as blank if there isn't one) — it calls
 `everest-plunge-pipely-xero-agent`, which creates the real Xero invoice.
+
+## Batch ETA / countdown (added 2026-09-01)
+
+The "Batch ETA (Countdown)" section on `/ops` sets one container arrival
+date per batch/shipment (e.g. "Batch 12") — every order allocated to that
+batch shares the same countdown, shown as a read-only column in Recent
+Orders (`e['Ship ETA']`, resolved server-side by `everest-plunge-stock-
+sheet-agent`, not editable per-row here). Once a batch is within its
+lead-time window (`FINAL_INVOICE_LEAD_DAYS` on `everest-plunge-pipely-
+xero-agent`, default 7 days), the final 50% invoice for every linked order
+on it fires **automatically** — no button click needed, unlike the manual
+"Send final invoice" action above. Both paths exist: manual for an order
+you want to release early, automatic for the normal case once its
+shipment's ETA is set.
 
 ## Auth
 

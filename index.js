@@ -186,6 +186,27 @@ app.post('/api/mark-final-payment-received', requireRole('ops'), async (req, res
   }
 });
 
+// Sets the per-batch/shipment container arrival ETA that drives
+// pipely-xero-agent's automatic final-invoice sweep (added 2026-09-01,
+// corrected same day from per-order to per-batch — matches how the real
+// spreadsheet tracks it) — see that agent's README for the full
+// countdown/invoice-window design.
+app.post('/api/set-batch-eta', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/set-batch-eta', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/batch-etas', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/batch-etas'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Talks to pipely-xero-agent, not the stock sheet agent — this is the one
 // action here that creates a real Xero invoice.
 app.post('/api/create-final-invoice', requireRole('ops'), async (req, res) => {
