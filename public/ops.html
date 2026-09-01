@@ -135,13 +135,13 @@
 
   <section>
     <h3>Products To Order</h3>
-    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order.</small></p>
+    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order. The "Stock Overview shortfall" column is a separate signal (more reserved across batch columns than physically in stock) — may or may not overlap with the logged quantity, verify before ordering.</small></p>
     <button id="refresh-to-order" class="secondary outline">Refresh</button>
     <table id="to-order-table">
       <thead>
-        <tr><th>SKU</th><th>Product</th><th>Total Qty</th><th>Orders</th><th>Action</th></tr>
+        <tr><th>SKU</th><th>Product</th><th>Total Qty (logged)</th><th>Orders</th><th>Stock Overview shortfall</th><th>Action</th></tr>
       </thead>
-      <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
     </table>
   </section>
 
@@ -302,15 +302,16 @@ async function loadProductsToOrder() {
   try {
     const data = await api('/api/products-to-order');
     const products = data.products || [];
-    if (!products.length) { tbody.innerHTML = '<tr><td colspan="5">Nothing pending.</td></tr>'; return; }
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing pending.</td></tr>'; return; }
     tbody.innerHTML = products.map((p) => `
       <tr>
         <td>${p.sku}</td><td>${p.product}</td><td><strong>${p.totalQuantity}</strong></td>
         <td>${p.orderIds.join(', ')}</td>
-        <td><button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button></td>
+        <td>${p.stockOverviewShortfall ? `<span class="status err">${p.stockOverviewShortfall}</span>` : '—'}</td>
+        <td>${p.orderIds.length ? `<button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button>` : '<span style="color:var(--pico-muted-color)">No logged orders to mark</span>'}</td>
       </tr>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5">Failed to load: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
   }
 }
 
