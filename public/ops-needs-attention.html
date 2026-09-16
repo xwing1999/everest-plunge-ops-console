@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Needs Attention</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  table { font-size: 0.92em; }
+  header nav a { margin-right: 1rem; }
+  .status { font-size: 0.9em; }
+  .status.ok { color: #15803d; }
+  .status.short { color: #b45309; }
+  .status.err { color: #b91c1c; }
+  section.card {
+    border: 1px solid var(--pico-muted-border-color); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+  }
+  section.card h3 { margin-top: 0; }
+  .paused-banner {
+    border: 2px solid #b45309; background: rgba(180, 83, 9, 0.08);
+    border-radius: 8px; padding: 0.8rem 1.1rem; margin-bottom: 1.5rem;
+  }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/needs-attention">Needs Attention</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <h3>Needs Attention</h3>
+  <p><small>Nothing here gets auto-fixed. Each section is a real discrepancy or a real queued sale waiting on a human to look at it and take the right action — that's deliberate while automation is paused, so the team learns the process before it runs on its own again.</small></p>
+  <div class="paused-banner" id="pause-banner"><small>Checking automation status…</small></div>
+  <button id="refresh-btn" class="secondary outline">Refresh all</button>
+
+  <section class="card">
+    <h3>⚠ Paused Shopify orders — waiting for a human to process</h3>
+    <p><small>A real Shopify sale came in while automation was paused. Nothing's been invoiced yet — check the order looks right, then click Process to create the real Xero invoice.</small></p>
+    <table id="shopify-paused-table">
+      <thead><tr><th>Order</th><th>Reason</th><th>Flagged</th><th>Action</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>⚠ Pipely deposit invoice failures</h3>
+    <p><small>The deposit-invoicing webhook fired but hit a real error. Fix the underlying cause (check the logs / Pipely deal), then retry.</small></p>
+    <table id="deposit-failures-table">
+      <thead><tr><th>Opportunity</th><th>Error</th><th>Flagged</th><th>Action</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Status mismatches — Pipely and Xero disagree</h3>
+    <p><small>Pipely's invoice says one payment status, Xero says another. Go check both directly and reconcile by hand — there's no safe automatic fix for a real disagreement like this.</small></p>
+    <table id="mismatch-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Pipely says</th><th>Xero says</th><th>Xero invoice</th></tr></thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Missing invoices</h3>
+    <p><small>Deal reached a stage where it should have an invoice by now, but none exists in Pipely.</small></p>
+    <table id="missing-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Deal value</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Pipely invoice exists, nothing found in Xero</h3>
+    <p><small>Pipely shows a real invoice for this deal, but Xero has nothing matching it — check Pipely's native sync actually pushed it through.</small></p>
+    <table id="not-found-xero-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Pipely invoice #</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function loadPauseBanner() {
+  // No direct endpoint exposes PAUSE_AUTOMATION today — inferred from
+  // whether anything's actually sitting in the Shopify paused-orders
+  // queue, since that's what would be empty once automation is back on
+  // and orders start processing themselves again.
+  $('pause-banner').innerHTML = '<small>⏸ Automation is currently paused — real sales are being queued below instead of processed automatically. Ask to have it turned back on once the team is comfortable with this page.</small>';
+}
+
+async function loadShopifyPaused() {
+  const tbody = document.querySelector('#shopify-paused-table tbody');
+  try {
+    const data = await api('/api/shopify-failed-orders');
+    const failures = (data.failures || []).filter((f) => !f.resolved);
+    if (!failures.length) { tbody.innerHTML = '<tr><td colspan="4">Nothing queued.</td></tr>'; return; }
+    tbody.innerHTML = failures.map((f) => `
+      <tr>
+        <td>${f.orderName}</td>
+        <td class="${f.error?.startsWith('PAUSED') ? 'status short' : 'status err'}">${f.error}</td>
+        <td>${new Date(f.at).toLocaleString()}</td>
+        <td><button class="process-shopify" data-order="${f.orderName}">Process now</button></td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+document.querySelector('#shopify-paused-table').addEventListener('click', async (ev) => {
+  const orderName = ev.target.dataset.order;
+  if (!orderName) return;
+  if (!confirm(`Process order ${orderName} for real now? This creates a real Xero invoice.`)) return;
+  try {
+    await api('/api/shopify-replay-order', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderName })
+    });
+    loadShopifyPaused();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+});
+
+async function loadDepositFailures() {
+  const tbody = document.querySelector('#deposit-failures-table tbody');
+  try {
+    const data = await api('/api/deposit-failures');
+    const failures = (data.failures || []).filter((f) => !f.resolved);
+    if (!failures.length) { tbody.innerHTML = '<tr><td colspan="4">Nothing queued.</td></tr>'; return; }
+    tbody.innerHTML = failures.map((f) => `
+      <tr>
+        <td>${f.opportunityId}</td>
+        <td class="${f.error?.startsWith('PAUSED') ? 'status short' : 'status err'}">${f.error}</td>
+        <td>${new Date(f.at).toLocaleString()}</td>
+        <td><button class="retry-deposit" data-opp="${f.opportunityId}">Retry now</button></td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+document.querySelector('#deposit-failures-table').addEventListener('click', async (ev) => {
+  const opportunityId = ev.target.dataset.opp;
+  if (!opportunityId) return;
+  if (!confirm(`Retry the deposit invoice for opportunity ${opportunityId} now?`)) return;
+  try {
+    await api('/api/pipely-replay-deposit', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ opportunityId })
+    });
+    loadDepositFailures();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+});
+
+async function loadInvoiceCheck() {
+  const mismatchBody = document.querySelector('#mismatch-table tbody');
+  const missingBody = document.querySelector('#missing-table tbody');
+  const notFoundBody = document.querySelector('#not-found-xero-table tbody');
+  try {
+    const data = await api('/api/invoice-check');
+
+    const mismatches = data.statusMismatch || [];
+    mismatchBody.innerHTML = mismatches.length ? mismatches.map((m) => `
+      <tr>
+        <td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td>
+        <td>${m.invoiceStatus}</td>
+        <td>${m.xeroStatus} (due $${m.xeroAmountDue})</td>
+        <td>${m.xeroInvoiceNumber || '—'}</td>
+      </tr>`).join('') : '<tr><td colspan="6">No mismatches — Pipely and Xero agree on everything checked.</td></tr>';
+
+    const missing = data.missingInvoice || [];
+    missingBody.innerHTML = missing.length ? missing.map((m) => `
+      <tr><td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td><td>${m.dealValue ? '$' + m.dealValue : '—'}</td></tr>
+    `).join('') : '<tr><td colspan="4">Nothing missing.</td></tr>';
+
+    const notFound = data.notFoundInXero || [];
+    notFoundBody.innerHTML = notFound.length ? notFound.map((m) => `
+      <tr><td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td><td>${m.invoiceNumber || '—'}</td></tr>
+    `).join('') : '<tr><td colspan="4">Nothing found missing from Xero.</td></tr>';
+  } catch (err) {
+    const msg = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
+    mismatchBody.innerHTML = msg;
+    missingBody.innerHTML = msg;
+    notFoundBody.innerHTML = msg;
+  }
+}
+
+function loadAll() {
+  loadPauseBanner();
+  loadShopifyPaused();
+  loadDepositFailures();
+  loadInvoiceCheck();
+}
+
+$('refresh-btn').addEventListener('click', loadAll);
+loadAll();
+</script>
+</body>
+</html>

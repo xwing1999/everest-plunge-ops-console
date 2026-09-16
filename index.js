@@ -111,6 +111,24 @@ async function callPipelyXeroAgent(pathSegment, { method = 'GET', body } = {}) {
   return data;
 }
 
+// PROXY to everest-plunge-shopify-xero-agent (added 2026-09-17, for the
+// Needs Attention page) — same pattern as the other two proxies above.
+async function callShopifyXeroAgent(pathSegment, { method = 'GET', body } = {}) {
+  if (!process.env.SHOPIFY_XERO_AGENT_URL) throw new Error('SHOPIFY_XERO_AGENT_URL is not configured.');
+  const res = await fetch(`${process.env.SHOPIFY_XERO_AGENT_URL}${pathSegment}`, {
+    method,
+    headers: {
+      'x-api-key': process.env.SHOPIFY_XERO_AGENT_API_KEY,
+      ...(body ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : {};
+  if (!res.ok) throw new Error(data.error || `Shopify-Xero agent error ${res.status}`);
+  return data;
+}
+
 // ---------------------------------------------------------------------------
 // API — read endpoints available to both roles, write endpoints ops-only.
 // ---------------------------------------------------------------------------
@@ -143,6 +161,57 @@ app.get('/api/batches', requireRole('ops'), async (_req, res) => {
 app.get('/api/delivered-orders', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/delivered-orders'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// NEEDS ATTENTION (added 2026-09-17) — while PAUSE_AUTOMATION is on, this
+// is the whole point: surface real cross-system discrepancies for a human
+// to look at and manually action, rather than anything auto-fixing itself.
+// Pulls from pipely-xero-agent's invoice-check (Pipely vs Xero) and
+// shopify-xero-agent's failed/paused-order queue in one place.
+// ---------------------------------------------------------------------------
+app.get('/api/invoice-check', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/invoice-check'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/deposit-failures', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/deposit-failures'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.get('/api/shopify-failed-orders', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callShopifyXeroAgent('/admin/failed-orders'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Only real write action on this page — replays one paused/failed Shopify
+// order for real. Still counts as "a human explicitly asked for this one,
+// right now" under PAUSE_AUTOMATION, same as the other manual /admin/run-*
+// endpoints elsewhere in this build.
+app.post('/api/shopify-replay-order', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callShopifyXeroAgent('/admin/replay-order', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+app.post('/api/pipely-replay-deposit', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/replay-deposit', { method: 'POST', body: req.body }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -254,6 +323,9 @@ app.get('/ops/batches', requireRole('ops'), (_req, res) => {
 });
 app.get('/ops/completed', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-completed.html'));
+});
+app.get('/ops/needs-attention', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-needs-attention.html'));
 });
 app.get('/sales', requireRole('sales'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'sales.html'));
