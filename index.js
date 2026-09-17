@@ -323,6 +323,9 @@ app.get('/', requireRole('sales'), (req, res) => {
 app.get('/ops', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops.html'));
 });
+app.get('/ops/log-sale', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-log-sale.html'));
+});
 app.get('/ops/stock', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-stock.html'));
 });

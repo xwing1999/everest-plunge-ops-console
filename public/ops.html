@@ -12,8 +12,6 @@
   .status.short { color: #b45309; }
   .status.err { color: #b91c1c; }
   table { font-size: 0.92em; }
-  .inline-form { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
-  .inline-form input { width: auto; margin: 0; padding: 0.3rem 0.5rem; }
   header nav a { margin-right: 1rem; }
   .ready-to-book {
     border: 3px solid #b91c1c;
@@ -32,6 +30,7 @@
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
     <ul>
       <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/log-sale">Log Sale</a></li>
       <li><a href="/ops/stock">Stock on Shore</a></li>
       <li><a href="/ops/batches">Batches</a></li>
       <li><a href="/ops/needs-attention">Needs Attention</a></li>
@@ -50,75 +49,8 @@
   </section>
 
   <section>
-    <h3>Log a Sold Deal</h3>
-    <form id="deal-form">
-      <div class="grid">
-        <label>Customer name*
-          <input type="text" id="customerName" required>
-        </label>
-        <label>Email
-          <input type="email" id="email">
-        </label>
-      </div>
-      <div class="grid">
-        <label>Product (SKU)
-          <select id="sku"><option value="">— loading stock —</option></select>
-        </label>
-        <label>Quantity
-          <input type="number" id="quantity" min="1" value="1">
-        </label>
-      </div>
-      <label>Delivery address
-        <input type="text" id="deliveryAddress">
-      </label>
-      <div class="grid">
-        <label>Deal value (NZD)
-          <input type="number" id="dealValue" step="0.01">
-        </label>
-        <label>Deposit status
-          <select id="depositStatus">
-            <option>Not yet invoiced</option>
-            <option>Deposit invoiced</option>
-            <option>Deposit paid</option>
-            <option>Paid in full</option>
-          </select>
-        </label>
-      </div>
-      <div class="grid">
-        <label>Allocation
-          <select id="allocation">
-            <option value="">— pick one —</option>
-            <option value="On Shore">On Shore — ships now</option>
-            <option value="On Water">On Water — incoming batch</option>
-            <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
-          </select>
-        </label>
-        <label>Batch reference <small>(if On Water)</small>
-          <input type="text" id="batchReference" placeholder="e.g. Batch 12">
-        </label>
-      </div>
-      <div class="grid">
-        <label>Expected date <small>(ETA, if On Water)</small>
-          <input type="date" id="expectedDate">
-        </label>
-        <label>Source
-          <select id="source">
-            <option>Manual</option>
-            <option>Pipely</option>
-            <option>Shopify</option>
-          </select>
-        </label>
-      </div>
-      <label>Notes
-        <input type="text" id="notes">
-      </label>
-      <button type="submit">Log sold deal</button>
-      <p id="deal-result"></p>
-    </form>
-  </section>
-
-  <section>
     <h3>Recent Orders</h3>
+    <p><small>Need to log a new sale? That's <a href="/ops/log-sale">Log Sale</a>. Managing a batch or deciding what to order next? That's <a href="/ops/batches">Batches</a>.</small></p>
     <button id="refresh-log" class="secondary outline">Refresh</button>
     <div style="overflow-x:auto">
     <table id="log-table">
@@ -128,53 +60,6 @@
       <tbody><tr><td colspan="9">Loading…</td></tr></tbody>
     </table>
     </div>
-  </section>
-
-  <section>
-    <h3>Batch Arrived</h3>
-    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch Stock Overview's In Stock count — do that separately in the sheet.</small></p>
-    <div class="inline-form">
-      <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
-      <button id="mark-arrived-btn">Mark batch arrived</button>
-    </div>
-    <p id="arrived-result"></p>
-  </section>
-
-  <section>
-    <h3>Batch ETA (Countdown)</h3>
-    <p><small>One arrival ETA per shipment — every order allocated to that batch shares this countdown (matches the real spreadsheet's per-batch ETA). The final 50% invoice fires automatically once a batch is within its lead-time window — see Recent Orders below.</small></p>
-    <div class="inline-form">
-      <input type="text" id="etaBatchRef" placeholder="e.g. Batch 12">
-      <input type="date" id="etaDate">
-      <button id="set-eta-btn">Set ETA</button>
-    </div>
-    <p id="eta-result"></p>
-    <table id="batch-eta-table">
-      <thead><tr><th>Batch</th><th>ETA</th><th>Last Updated</th></tr></thead>
-      <tbody><tr><td colspan="3">Loading…</td></tr></tbody>
-    </table>
-  </section>
-
-  <section>
-    <h3>Products To Order</h3>
-    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order. The "Stock Overview shortfall" column is a separate signal (more reserved across batch columns than physically in stock) — may or may not overlap with the logged quantity, verify before ordering.</small></p>
-    <button id="refresh-to-order" class="secondary outline">Refresh</button>
-    <table id="to-order-table">
-      <thead>
-        <tr><th>SKU</th><th>Product</th><th>Total Qty (logged)</th><th>Orders</th><th>Stock Overview shortfall</th><th>Action</th></tr>
-      </thead>
-      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
-    </table>
-  </section>
-
-  <section>
-    <h3>Stock Overview</h3>
-    <table id="stock-table">
-      <thead>
-        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>In Stock</th><th>Reserved</th><th>Available</th><th>New Orders</th><th>Balance</th></tr>
-      </thead>
-      <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
-    </table>
   </section>
 
 </main>
@@ -187,29 +72,6 @@ async function api(path, options) {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
-}
-
-let stockProducts = [];
-
-async function loadStockOverview() {
-  const tbody = document.querySelector('#stock-table tbody');
-  try {
-    const data = await api('/api/stock-overview');
-    stockProducts = data.products || [];
-    tbody.innerHTML = stockProducts.map((p) => `
-      <tr>
-        <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
-        <td>${p.inStock}</td><td>${p.reserved}</td><td>${p.available}</td>
-        <td>${p.newOrders}</td><td><strong>${p.balance}</strong></td>
-      </tr>`).join('');
-
-    const skuSelect = $('sku');
-    skuSelect.innerHTML = '<option value="">— select a product —</option>' +
-      stockProducts.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize}) — ${p.balance} available</option>`).join('') +
-      '<option value="__other__">Other / not listed</option>';
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${err.message}</td></tr>`;
-  }
 }
 
 // What action (if any) an order needs next, in order of the real
@@ -286,9 +148,9 @@ function daysUntilClient(dateStr) {
 
 const FINAL_INVOICE_LEAD_DAYS = 7; // must match FINAL_INVOICE_LEAD_DAYS on pipely-xero-agent
 
-// Read-only here — the ETA itself is set per batch in the "Batch ETA"
-// section above, not per order. This just shows what each order inherits
-// from its batch via "Batch Reference".
+// Read-only here — the ETA itself is set per batch on the Batches page,
+// not per order. This just shows what each order inherits from its batch
+// via "Batch Reference".
 function shipEtaCell(e) {
   const date = e['Ship ETA'];
   if (!date) return `<span style="color:var(--pico-muted-color)">${e['Batch Reference'] ? 'No ETA set for ' + e['Batch Reference'] : 'No batch'}</span>`;
@@ -360,131 +222,9 @@ async function handleOrderActionClick(ev) {
 document.querySelector('#log-table').addEventListener('click', handleOrderActionClick);
 $('ready-to-book-body').addEventListener('click', handleOrderActionClick);
 
-async function loadProductsToOrder() {
-  const tbody = document.querySelector('#to-order-table tbody');
-  try {
-    const data = await api('/api/products-to-order');
-    const products = data.products || [];
-    if (!products.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing pending.</td></tr>'; return; }
-    tbody.innerHTML = products.map((p) => `
-      <tr>
-        <td>${p.sku}</td><td>${p.product}</td><td><strong>${p.totalQuantity}</strong></td>
-        <td>${p.orderIds.join(', ')}</td>
-        <td>${p.stockOverviewShortfall ? `<span class="status err">${p.stockOverviewShortfall}</span>` : '—'}</td>
-        <td>${p.orderIds.length ? `<button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button>` : '<span style="color:var(--pico-muted-color)">No logged orders to mark</span>'}</td>
-      </tr>`).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
-  }
-}
-
-document.querySelector('#to-order-table').addEventListener('click', async (ev) => {
-  if (!ev.target.classList.contains('mark-ordered')) return;
-  const orderIds = ev.target.dataset.orders.split(',').filter(Boolean);
-  try {
-    for (const orderId of orderIds) {
-      await api('/api/mark-order-placed', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId })
-      });
-    }
-    loadProductsToOrder();
-  } catch (err) {
-    alert('Failed: ' + err.message);
-  }
-});
-
-$('mark-arrived-btn').addEventListener('click', async () => {
-  const result = $('arrived-result');
-  const batchReference = $('arrivedBatchRef').value.trim();
-  if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
-  result.textContent = 'Working…';
-  try {
-    const data = await api('/api/mark-batch-arrived', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchReference })
-    });
-    result.textContent = data.flippedCount
-      ? `Flipped ${data.flippedCount} order(s) to "Ready to organise": ${data.flipped.map((f) => f.orderId).join(', ')}`
-      : 'No orders were waiting on that batch reference.';
-    loadAutomationLog();
-  } catch (err) {
-    result.textContent = 'Failed: ' + err.message;
-  }
-});
-
-async function loadBatchEtas() {
-  const tbody = document.querySelector('#batch-eta-table tbody');
-  try {
-    const data = await api('/api/batch-etas');
-    const rows = Object.entries(data.batchEtas || {});
-    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="3">No batch ETAs set yet.</td></tr>'; return; }
-    tbody.innerHTML = rows.map(([batchReference, v]) => `
-      <tr><td>${batchReference}</td><td>${v.eta}</td><td>${new Date(v.updatedAt).toLocaleString()}</td></tr>`).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3">Failed to load: ${err.message}</td></tr>`;
-  }
-}
-
-$('set-eta-btn').addEventListener('click', async () => {
-  const result = $('eta-result');
-  const batchReference = $('etaBatchRef').value.trim();
-  const date = $('etaDate').value;
-  if (!batchReference || !date) { result.textContent = 'Enter a batch reference and pick a date first.'; return; }
-  result.textContent = 'Working…';
-  try {
-    await api('/api/set-batch-eta', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchReference, date })
-    });
-    result.textContent = `Set ETA for ${batchReference}: ${date}. Any order on this batch within ${FINAL_INVOICE_LEAD_DAYS} days will be final-invoiced automatically on the next sweep.`;
-    loadBatchEtas();
-    loadAutomationLog();
-  } catch (err) {
-    result.textContent = 'Failed: ' + err.message;
-  }
-});
-
-$('refresh-to-order').addEventListener('click', loadProductsToOrder);
-
-$('deal-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const result = $('deal-result');
-  result.textContent = 'Logging…';
-  const skuValue = $('sku').value === '__other__' ? '' : $('sku').value;
-  try {
-    const data = await api('/api/log-sold-deal', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customerName: $('customerName').value,
-        email: $('email').value,
-        sku: skuValue,
-        quantity: Number($('quantity').value) || undefined,
-        deliveryAddress: $('deliveryAddress').value,
-        dealValue: $('dealValue').value ? Number($('dealValue').value) : undefined,
-        depositStatus: $('depositStatus').value,
-        allocation: $('allocation').value,
-        batchReference: $('batchReference').value,
-        expectedDate: $('expectedDate').value,
-        source: $('source').value,
-        notes: $('notes').value
-      })
-    });
-    result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}`;
-    $('deal-form').reset();
-    loadAutomationLog();
-    loadStockOverview();
-  } catch (err) {
-    result.textContent = 'Failed: ' + err.message;
-  }
-});
-
 $('refresh-log').addEventListener('click', loadAutomationLog);
 
-loadStockOverview();
 loadAutomationLog();
-loadProductsToOrder();
-loadBatchEtas();
 loadReadyToBook();
 </script>
 </body>

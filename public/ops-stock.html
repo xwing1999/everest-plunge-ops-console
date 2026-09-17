@@ -18,6 +18,7 @@
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
     <ul>
       <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/log-sale">Log Sale</a></li>
       <li><a href="/ops/stock">Stock on Shore</a></li>
       <li><a href="/ops/batches">Batches</a></li>
       <li><a href="/ops/needs-attention">Needs Attention</a></li>
@@ -30,7 +31,7 @@
 <main class="container">
 
   <h3>Stock on Shore — Silverdale</h3>
-  <p><small>Physically in the warehouse right now — "Available"/"Balance" are against the landed batch only (In Stock minus that batch's reservations/new orders), matching the sheet's own original formula. The "Incoming (on the water)" column is separate — units already pre-committed against later batch shipments that haven't landed yet, so they don't reduce what's on shore today. A red/negative on-shore balance means more is committed against the CURRENT warehouse stock than physically exists — check Products To Order on the Dashboard.</small></p>
+  <p><small>Physically in the warehouse right now — "Available"/"Balance" are against the landed batch only (In Stock minus that batch's reservations/new orders), matching the sheet's own original formula. The "Incoming (on the water)" column is separate — units already pre-committed against later batch shipments that haven't landed yet, so they don't reduce what's on shore today. A red/negative on-shore balance means more is committed against the CURRENT warehouse stock than physically exists — check Products To Order on the <a href="/ops/batches">Batches</a> page.</small></p>
   <button id="refresh-btn" class="secondary outline">Refresh</button>
   <table id="stock-table">
     <thead>

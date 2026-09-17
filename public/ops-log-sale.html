@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everest Plunge — Log Sale</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<style>
+  body { padding-bottom: 4rem; }
+  header nav a { margin-right: 1rem; }
+</style>
+</head>
+<body>
+<header class="container">
+  <nav>
+    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul>
+      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/log-sale">Log Sale</a></li>
+      <li><a href="/ops/stock">Stock on Shore</a></li>
+      <li><a href="/ops/batches">Batches</a></li>
+      <li><a href="/ops/needs-attention">Needs Attention</a></li>
+      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/sales">Sales view →</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="container">
+
+  <h3>Log a Sold Deal</h3>
+  <p><small>Adds a new order to the Automation Log — this is what makes it show up on the Dashboard, Batches, and every cross-check on Needs Attention.</small></p>
+  <form id="deal-form">
+    <div class="grid">
+      <label>Customer name*
+        <input type="text" id="customerName" required>
+      </label>
+      <label>Email
+        <input type="email" id="email">
+      </label>
+    </div>
+    <div class="grid">
+      <label>Product (SKU)
+        <select id="sku"><option value="">— loading stock —</option></select>
+      </label>
+      <label>Quantity
+        <input type="number" id="quantity" min="1" value="1">
+      </label>
+    </div>
+    <label>Delivery address
+      <input type="text" id="deliveryAddress">
+    </label>
+    <div class="grid">
+      <label>Deal value (NZD)
+        <input type="number" id="dealValue" step="0.01">
+      </label>
+      <label>Deposit status
+        <select id="depositStatus">
+          <option>Not yet invoiced</option>
+          <option>Deposit invoiced</option>
+          <option>Deposit paid</option>
+          <option>Paid in full</option>
+        </select>
+      </label>
+    </div>
+    <div class="grid">
+      <label>Allocation
+        <select id="allocation">
+          <option value="">— pick one —</option>
+          <option value="On Shore">On Shore — ships now</option>
+          <option value="On Water">On Water — incoming batch</option>
+          <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
+        </select>
+      </label>
+      <label>Batch reference <small>(if On Water)</small>
+        <input type="text" id="batchReference" placeholder="e.g. Batch 12">
+      </label>
+    </div>
+    <div class="grid">
+      <label>Expected date <small>(ETA, if On Water)</small>
+        <input type="date" id="expectedDate">
+      </label>
+      <label>Source
+        <select id="source">
+          <option>Manual</option>
+          <option>Pipely</option>
+          <option>Shopify</option>
+        </select>
+      </label>
+    </div>
+    <label>Notes
+      <input type="text" id="notes">
+    </label>
+    <button type="submit">Log sold deal</button>
+    <p id="deal-result"></p>
+  </form>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+}
+
+async function loadStockOptions() {
+  const skuSelect = $('sku');
+  try {
+    const data = await api('/api/stock-overview');
+    const products = data.products || [];
+    skuSelect.innerHTML = '<option value="">— select a product —</option>' +
+      products.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize}) — ${p.balance} available</option>`).join('') +
+      '<option value="__other__">Other / not listed</option>';
+  } catch (err) {
+    skuSelect.innerHTML = `<option value="">Failed to load stock: ${err.message}</option>`;
+  }
+}
+
+$('deal-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const result = $('deal-result');
+  result.textContent = 'Logging…';
+  const skuValue = $('sku').value === '__other__' ? '' : $('sku').value;
+  try {
+    const data = await api('/api/log-sold-deal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customerName: $('customerName').value,
+        email: $('email').value,
+        sku: skuValue,
+        quantity: Number($('quantity').value) || undefined,
+        deliveryAddress: $('deliveryAddress').value,
+        dealValue: $('dealValue').value ? Number($('dealValue').value) : undefined,
+        depositStatus: $('depositStatus').value,
+        allocation: $('allocation').value,
+        batchReference: $('batchReference').value,
+        expectedDate: $('expectedDate').value,
+        source: $('source').value,
+        notes: $('notes').value
+      })
+    });
+    result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}`;
+    $('deal-form').reset();
+    loadStockOptions();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+loadStockOptions();
+</script>
+</body>
+</html>

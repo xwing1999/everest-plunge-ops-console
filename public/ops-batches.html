@@ -16,6 +16,13 @@
   details { border: 1px solid var(--pico-muted-border-color); border-radius: 6px; margin-bottom: 1rem; padding: 0.75rem 1rem; }
   summary { cursor: pointer; font-weight: bold; }
   .notes { color: var(--pico-muted-color); font-size: 0.85em; }
+  .inline-form { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+  .inline-form input { width: auto; margin: 0; padding: 0.3rem 0.5rem; }
+  section.card {
+    border: 1px solid var(--pico-muted-border-color); border-radius: 8px;
+    padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+  }
+  section.card h3 { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -24,6 +31,7 @@
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
     <ul>
       <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops/log-sale">Log Sale</a></li>
       <li><a href="/ops/stock">Stock on Shore</a></li>
       <li><a href="/ops/batches">Batches</a></li>
       <li><a href="/ops/needs-attention">Needs Attention</a></li>
@@ -36,9 +44,50 @@
 <main class="container">
 
   <h3>Batches</h3>
-  <p><small>Read-only mirror of the real batch tabs in the spreadsheet — clean allocation view, exactly what's actually in the sheet. Nothing here is editable; fix client details directly in the sheet if something's wrong. ETA/countdown is set on the Dashboard's "Batch ETA" section and drives automatic final invoicing.</small></p>
-  <button id="refresh-btn" class="secondary outline">Refresh</button>
-  <div id="batches-body">Loading…</div>
+
+  <section class="card">
+    <h3>Batch ETA (Countdown)</h3>
+    <p><small>One arrival ETA per shipment — every order allocated to that batch shares this countdown. The final 50% invoice fires automatically once a batch is within its lead-time window.</small></p>
+    <div class="inline-form">
+      <input type="text" id="etaBatchRef" placeholder="e.g. Batch 12">
+      <input type="date" id="etaDate">
+      <button id="set-eta-btn">Set ETA</button>
+    </div>
+    <p id="eta-result"></p>
+    <table id="batch-eta-table">
+      <thead><tr><th>Batch</th><th>ETA</th><th>Last Updated</th></tr></thead>
+      <tbody><tr><td colspan="3">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Batch Arrived</h3>
+    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch Stock on Shore's In Stock count — do that separately in the sheet.</small></p>
+    <div class="inline-form">
+      <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
+      <button id="mark-arrived-btn">Mark batch arrived</button>
+    </div>
+    <p id="arrived-result"></p>
+  </section>
+
+  <section class="card">
+    <h3>Products To Order</h3>
+    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order. The "Stock shortfall" column is a separate signal (more reserved across batch columns than physically in stock) — may or may not overlap with the logged quantity, verify before ordering.</small></p>
+    <button id="refresh-to-order" class="secondary outline">Refresh</button>
+    <table id="to-order-table">
+      <thead>
+        <tr><th>SKU</th><th>Product</th><th>Total Qty (logged)</th><th>Orders</th><th>Stock shortfall</th><th>Action</th></tr>
+      </thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h3>Batch Tabs</h3>
+    <p><small>Read-only mirror of the real batch tabs in the spreadsheet — clean allocation view, exactly what's actually in the sheet. Nothing here is editable; fix client details directly in the sheet if something's wrong.</small></p>
+    <button id="refresh-btn" class="secondary outline">Refresh</button>
+    <div id="batches-body">Loading…</div>
+  </section>
 
 </main>
 
@@ -77,7 +126,7 @@ function etaBadge(eta) {
 // Matches a real batch tab name (e.g. "BATCH 12") against batch-etas keys
 // (e.g. "Batch 12") case-insensitively — the two are typed independently
 // (one is a real sheet tab name, the other whatever ops types into the
-// Dashboard's Batch ETA field), so an exact-case match isn't guaranteed.
+// Batch ETA field above), so an exact-case match isn't guaranteed.
 function findEta(batchEtas, batchName) {
   const key = Object.keys(batchEtas).find((k) => k.toLowerCase() === batchName.toLowerCase());
   return key ? batchEtas[key] : null;
@@ -133,7 +182,97 @@ async function loadBatches() {
 }
 
 $('refresh-btn').addEventListener('click', loadBatches);
+
+async function loadBatchEtas() {
+  const tbody = document.querySelector('#batch-eta-table tbody');
+  try {
+    const data = await api('/api/batch-etas');
+    const rows = Object.entries(data.batchEtas || {});
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="3">No batch ETAs set yet.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(([batchReference, v]) => `
+      <tr><td>${batchReference}</td><td>${v.eta}</td><td>${new Date(v.updatedAt).toLocaleString()}</td></tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+$('set-eta-btn').addEventListener('click', async () => {
+  const result = $('eta-result');
+  const batchReference = $('etaBatchRef').value.trim();
+  const date = $('etaDate').value;
+  if (!batchReference || !date) { result.textContent = 'Enter a batch reference and pick a date first.'; return; }
+  result.textContent = 'Working…';
+  try {
+    await api('/api/set-batch-eta', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference, date })
+    });
+    result.textContent = `Set ETA for ${batchReference}: ${date}. Any order on this batch within ${FINAL_INVOICE_LEAD_DAYS} days will be final-invoiced automatically on the next sweep.`;
+    loadBatchEtas();
+    loadBatches();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+$('mark-arrived-btn').addEventListener('click', async () => {
+  const result = $('arrived-result');
+  const batchReference = $('arrivedBatchRef').value.trim();
+  if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
+  result.textContent = 'Working…';
+  try {
+    const data = await api('/api/mark-batch-arrived', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference })
+    });
+    result.textContent = data.flippedCount
+      ? `Flipped ${data.flippedCount} order(s) to "Ready to organise": ${data.flipped.map((f) => f.orderId).join(', ')}`
+      : 'No orders were waiting on that batch reference.';
+    loadBatches();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+async function loadProductsToOrder() {
+  const tbody = document.querySelector('#to-order-table tbody');
+  try {
+    const data = await api('/api/products-to-order');
+    const products = data.products || [];
+    if (!products.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing pending.</td></tr>'; return; }
+    tbody.innerHTML = products.map((p) => `
+      <tr>
+        <td>${p.sku}</td><td>${p.product}</td><td><strong>${p.totalQuantity}</strong></td>
+        <td>${p.orderIds.join(', ')}</td>
+        <td>${p.stockOverviewShortfall ? `<span class="status err">${p.stockOverviewShortfall}</span>` : '—'}</td>
+        <td>${p.orderIds.length ? `<button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button>` : '<span style="color:var(--pico-muted-color)">No logged orders to mark</span>'}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
+document.querySelector('#to-order-table').addEventListener('click', async (ev) => {
+  if (!ev.target.classList.contains('mark-ordered')) return;
+  const orderIds = ev.target.dataset.orders.split(',').filter(Boolean);
+  try {
+    for (const orderId of orderIds) {
+      await api('/api/mark-order-placed', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId })
+      });
+    }
+    loadProductsToOrder();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+});
+
+$('refresh-to-order').addEventListener('click', loadProductsToOrder);
+
 loadBatches();
+loadBatchEtas();
+loadProductsToOrder();
 </script>
 </body>
 </html>
