@@ -181,6 +181,14 @@ app.get('/api/invoice-check', requireRole('ops'), async (_req, res) => {
   }
 });
 
+app.get('/api/unallocated-deals', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/unallocated-deals'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/api/deposit-failures', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callPipelyXeroAgent('/admin/deposit-failures'));

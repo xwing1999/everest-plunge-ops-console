@@ -83,6 +83,15 @@
   </section>
 
   <section class="card">
+    <h3>Won deals with no stock allocated</h3>
+    <p><small>Deal reached a won stage in Pipely but isn't in the Automation Log yet — no client should be won without stock allocated to them somewhere.</small></p>
+    <table id="unallocated-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Deal value</th><th>Contact</th></tr></thead>
+      <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
     <h3>Pipely invoice exists, nothing found in Xero</h3>
     <p><small>Pipely shows a real invoice for this deal, but Xero has nothing matching it — check Pipely's native sync actually pushed it through.</small></p>
     <table id="not-found-xero-table">
@@ -210,11 +219,28 @@ async function loadInvoiceCheck() {
   }
 }
 
+async function loadUnallocated() {
+  const tbody = document.querySelector('#unallocated-table tbody');
+  try {
+    const data = await api('/api/unallocated-deals');
+    const deals = data.unallocated || [];
+    if (!deals.length) { tbody.innerHTML = '<tr><td colspan="5">Everything won is allocated somewhere.</td></tr>'; return; }
+    tbody.innerHTML = deals.map((d) => `
+      <tr>
+        <td>${d.dealName}</td><td>${d.rep || '—'}</td><td>${d.stage}</td>
+        <td>${d.dealValue ? '$' + d.dealValue : '—'}</td><td>${d.contactEmail || '—'}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
 function loadAll() {
   loadPauseBanner();
   loadShopifyPaused();
   loadDepositFailures();
   loadInvoiceCheck();
+  loadUnallocated();
 }
 
 $('refresh-btn').addEventListener('click', loadAll);
