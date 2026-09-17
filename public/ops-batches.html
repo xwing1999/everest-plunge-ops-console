@@ -23,6 +23,18 @@
     padding: 1rem 1.25rem; margin-bottom: 1.5rem;
   }
   section.card h3 { margin-top: 0; }
+  .pipeline {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem; margin-bottom: 2rem;
+  }
+  .pipeline-block {
+    border: 1px solid var(--pico-muted-border-color); border-radius: 8px; padding: 1rem;
+  }
+  .pipeline-block h4 { margin: 0 0 0.25rem 0; }
+  .pipeline-block .sub { color: var(--pico-muted-color); font-size: 0.85em; margin-bottom: 0.75rem; }
+  .pipeline-block table { font-size: 0.95em; margin: 0; }
+  .pipeline-block td:last-child, .pipeline-block th:last-child { text-align: center; }
+  .pipeline-block td:last-child { font-weight: bold; }
 </style>
 </head>
 <body>
@@ -44,6 +56,8 @@
 <main class="container">
 
   <h3>Batches</h3>
+  <p><small>What's on shore now, what's coming on each shipment, and what's not even ordered yet — read left to right.</small></p>
+  <div class="pipeline" id="pipeline-body">Loading…</div>
 
   <section class="card">
     <h3>Batch ETA (Countdown)</h3>
@@ -132,6 +146,71 @@ function findEta(batchEtas, batchName) {
   return key ? batchEtas[key] : null;
 }
 
+// Xavier: "one block stock onshore, next block order 10 on water, next
+// block order 11 on water, next block next order to be ordered, so it's
+// really clear" — one glance at where every unit actually is. Built from
+// data that already exists elsewhere (Stock Overview's incomingBreakdown
+// is per-SKU-per-batch; Products To Order is the not-yet-placed list) —
+// this just regroups it by batch instead of by SKU.
+function extractBatchNumber(batchName) {
+  const match = batchName.match(/(\d+)/);
+  return match ? Number(match[1]) : Infinity;
+}
+
+async function loadPipeline() {
+  const body = $('pipeline-body');
+  try {
+    const [stockData, etaData, toOrderData] = await Promise.all([
+      api('/api/stock-overview'), api('/api/batch-etas'), api('/api/products-to-order')
+    ]);
+    const products = stockData.products || [];
+    const batchEtas = etaData.batchEtas || {};
+
+    const onShoreRows = products.map((p) => `
+      <tr><td>${p.productName} — ${p.modelSize}</td><td class="${p.balance < 0 ? 'status err' : ''}">${p.balance}</td></tr>
+    `).join('');
+    const onShoreBlock = `
+      <div class="pipeline-block">
+        <h4>Stock On Shore</h4>
+        <div class="sub">Available to sell today</div>
+        <table><thead><tr><th>Product</th><th>Available</th></tr></thead><tbody>${onShoreRows}</tbody></table>
+      </div>`;
+
+    const byBatch = new Map();
+    for (const p of products) {
+      for (const b of p.incomingBreakdown || []) {
+        if (!byBatch.has(b.batch)) byBatch.set(b.batch, []);
+        byBatch.get(b.batch).push({ label: `${p.productName} — ${p.modelSize}`, quantity: b.quantity });
+      }
+    }
+    const batchNames = [...byBatch.keys()].sort((a, b) => extractBatchNumber(a) - extractBatchNumber(b));
+    const batchBlocks = batchNames.map((name) => {
+      const rows = byBatch.get(name).map((r) => `<tr><td>${r.label}</td><td>${r.quantity}</td></tr>`).join('');
+      return `
+        <div class="pipeline-block">
+          <h4>${name} <small style="font-weight:normal">— on water</small></h4>
+          <div class="sub">${etaBadge(findEta(batchEtas, name))}</div>
+          <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>`;
+    }).join('');
+
+    const toOrder = toOrderData.products || [];
+    const toOrderRows = toOrder.length
+      ? toOrder.map((p) => `<tr><td>${p.product}</td><td>${p.totalQuantity}</td></tr>`).join('')
+      : '<tr><td colspan="2">Nothing pending.</td></tr>';
+    const toOrderBlock = `
+      <div class="pipeline-block">
+        <h4>Next Order <small style="font-weight:normal">— not yet placed</small></h4>
+        <div class="sub">Waiting to be included in the next China order</div>
+        <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${toOrderRows}</tbody></table>
+      </div>`;
+
+    body.innerHTML = onShoreBlock + batchBlocks + toOrderBlock;
+  } catch (err) {
+    body.innerHTML = `<p>Failed to load: ${err.message}</p>`;
+  }
+}
+
 async function loadBatches() {
   const body = $('batches-body');
   try {
@@ -210,6 +289,7 @@ $('set-eta-btn').addEventListener('click', async () => {
     result.textContent = `Set ETA for ${batchReference}: ${date}. Any order on this batch within ${FINAL_INVOICE_LEAD_DAYS} days will be final-invoiced automatically on the next sweep.`;
     loadBatchEtas();
     loadBatches();
+    loadPipeline();
   } catch (err) {
     result.textContent = 'Failed: ' + err.message;
   }
@@ -229,6 +309,7 @@ $('mark-arrived-btn').addEventListener('click', async () => {
       ? `Flipped ${data.flippedCount} order(s) to "Ready to organise": ${data.flipped.map((f) => f.orderId).join(', ')}`
       : 'No orders were waiting on that batch reference.';
     loadBatches();
+    loadPipeline();
   } catch (err) {
     result.textContent = 'Failed: ' + err.message;
   }
@@ -263,6 +344,7 @@ document.querySelector('#to-order-table').addEventListener('click', async (ev) =
       });
     }
     loadProductsToOrder();
+    loadPipeline();
   } catch (err) {
     alert('Failed: ' + err.message);
   }
@@ -273,6 +355,7 @@ $('refresh-to-order').addEventListener('click', loadProductsToOrder);
 loadBatches();
 loadBatchEtas();
 loadProductsToOrder();
+loadPipeline();
 </script>
 </body>
 </html>
