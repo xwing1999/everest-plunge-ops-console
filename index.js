@@ -189,6 +189,16 @@ app.get('/api/unallocated-deals', requireRole('ops'), async (_req, res) => {
   }
 });
 
+// Temporary — proxies pipely-xero-agent's temporary product diagnostic
+// (see that agent's own comment). Remove alongside it once answered.
+app.get('/api/pipely-product-diagnostic', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/pipely-product-diagnostic'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/api/deposit-failures', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callPipelyXeroAgent('/admin/deposit-failures'));
