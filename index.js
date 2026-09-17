@@ -197,16 +197,6 @@ app.get('/api/stuck-deposit-paid', requireRole('ops'), async (_req, res) => {
   }
 });
 
-// Temporary — proxies stock-sheet-agent's temporary raw-column-A
-// diagnostic (see that agent's own comment). Remove alongside it.
-app.get('/api/stock-overview-raw-column-a', requireRole('ops'), async (_req, res) => {
-  try {
-    res.json(await callStockSheetAgent('/admin/stock-overview-raw-column-a'));
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
 app.post('/api/add-stock-product', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/add-stock-product', { method: 'POST', body: req.body }));
@@ -218,16 +208,6 @@ app.post('/api/add-stock-product', requireRole('ops'), async (req, res) => {
 app.post('/api/assign-stock-sku', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/assign-stock-sku', { method: 'POST', body: req.body }));
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
-// Temporary — proxies stock-sheet-agent's temporary row-delete cleanup.
-// Remove alongside it.
-app.post('/api/delete-stock-overview-rows', requireRole('ops'), async (req, res) => {
-  try {
-    res.json(await callStockSheetAgent('/admin/delete-stock-overview-rows', { method: 'POST', body: req.body }));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
