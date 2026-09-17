@@ -74,8 +74,8 @@
   </section>
 
   <section class="card">
-    <h3>Missing invoices</h3>
-    <p><small>Deal reached a stage where it should have an invoice by now, but none exists in Pipely.</small></p>
+    <h3>No invoice in Xero</h3>
+    <p><small>Xero is the final resting place for invoices — this deal reached a stage where it should have one by now, but Xero has no deposit or final invoice on record for it at all. This is the real problem regardless of what Pipely's own invoice object shows.</small></p>
     <table id="missing-table">
       <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Deal value</th></tr></thead>
       <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
@@ -93,7 +93,7 @@
 
   <section class="card">
     <h3>Pipely invoice exists, nothing found in Xero</h3>
-    <p><small>Pipely shows a real invoice for this deal, but Xero has nothing matching it — check Pipely's native sync actually pushed it through.</small></p>
+    <p><small>Pipely shows a real invoice for this deal, but Xero has nothing matching it — this is a real issue since Xero is the source of truth. (The reverse — an invoice in Xero with nothing in Pipely — is fine and isn't flagged.)</small></p>
     <table id="not-found-xero-table">
       <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Pipely invoice #</th></tr></thead>
       <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
@@ -202,10 +202,10 @@ async function loadInvoiceCheck() {
         <td>${m.xeroInvoiceNumber || '—'}</td>
       </tr>`).join('') : '<tr><td colspan="6">No mismatches — Pipely and Xero agree on everything checked.</td></tr>';
 
-    const missing = data.missingInvoice || [];
+    const missing = data.noInvoiceInXero || [];
     missingBody.innerHTML = missing.length ? missing.map((m) => `
       <tr><td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td><td>${m.dealValue ? '$' + m.dealValue : '—'}</td></tr>
-    `).join('') : '<tr><td colspan="4">Nothing missing.</td></tr>';
+    `).join('') : '<tr><td colspan="4">Nothing missing — every won deal has an invoice in Xero.</td></tr>';
 
     const notFound = data.notFoundInXero || [];
     notFoundBody.innerHTML = notFound.length ? notFound.map((m) => `
