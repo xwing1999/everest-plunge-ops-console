@@ -197,6 +197,14 @@ app.get('/api/stuck-deposit-paid', requireRole('ops'), async (_req, res) => {
   }
 });
 
+app.post('/api/add-stock-product', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/add-stock-product', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Fast, cached read — a plain Sheets read via stock-sheet-agent, not a
 // live Xero cross-check. Use this for normal page loads.
 app.get('/api/payment-audit-cache', requireRole('ops'), async (_req, res) => {
