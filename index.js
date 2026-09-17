@@ -215,6 +215,24 @@ app.post('/api/add-stock-product', requireRole('ops'), async (req, res) => {
   }
 });
 
+app.post('/api/assign-stock-sku', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/assign-stock-sku', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Temporary — proxies stock-sheet-agent's temporary row-delete cleanup.
+// Remove alongside it.
+app.post('/api/delete-stock-overview-rows', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/delete-stock-overview-rows', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Fast, cached read — a plain Sheets read via stock-sheet-agent, not a
 // live Xero cross-check. Use this for normal page loads.
 app.get('/api/payment-audit-cache', requireRole('ops'), async (_req, res) => {
