@@ -4,54 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Everest Plunge — Sales View</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
 <style>
-  body { padding-bottom: 4rem; }
-  table { font-size: 0.92em; }
-  #avail-result { font-weight: bold; }
-  #avail-result.ok { color: #15803d; }
-  #avail-result.short { color: #b45309; }
-  .status { font-size: 0.9em; }
-  .status.ok { color: #15803d; }
-  .status.short { color: #b45309; }
-  .status.err { color: #b91c1c; }
-  .incoming-line { display: block; }
+  :root {
+    --bg: #0b0f14;
+    --panel: #12181f;
+    --panel-border: #232b34;
+    --text: #e8edf2;
+    --muted: #8a97a3;
+    --brand: #3fb6a8;
+    --brand-soft: rgba(63, 182, 168, 0.12);
+    --ok: #34c185;
+    --warn: #e0a733;
+    --err: #e05a5a;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: 4rem; line-height: 1.5;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+  header.top {
+    border-bottom: 1px solid var(--panel-border); padding: 1.5rem 0; margin-bottom: 0.5rem;
+  }
+  header.top h1 { font-size: 1.4rem; margin: 0; letter-spacing: 0.2px; }
+  header.top .sub { color: var(--muted); font-size: 0.92rem; margin-top: 0.35rem; }
+  header.top a { color: var(--brand); text-decoration: none; }
+  header.top a:hover { text-decoration: underline; }
+
+  h2.section-title { font-size: 1.1rem; margin: 2rem 0 0.75rem; color: var(--text); }
+  .hint { color: var(--muted); font-size: 0.88rem; margin: 0 0 1rem; max-width: 70ch; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius);
+    padding: 1.25rem 1.4rem;
+  }
+
+  .checker { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+  .checker .field { flex: 1; min-width: 220px; display: flex; flex-direction: column; gap: 0.35rem; }
+  .checker label { font-size: 0.82rem; color: var(--muted); }
+  select, input {
+    background: #0f151b; border: 1px solid var(--panel-border); color: var(--text);
+    border-radius: 8px; padding: 0.6rem 0.7rem; font-size: 0.95rem;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--brand); }
+  button {
+    background: var(--brand); color: #06201c; border: none; border-radius: 8px;
+    padding: 0.65rem 1.1rem; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  #avail-result {
+    margin-top: 1rem; font-weight: 600; font-size: 1rem; min-height: 1.2em;
+  }
+  #avail-result.ok { color: var(--ok); }
+  #avail-result.short { color: var(--warn); }
+
+  .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+  .pipeline .card h3 { margin: 0 0 0.15rem; font-size: 1rem; }
+  .pipeline .card .badge { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.85rem; display: block; }
+  .pipeline table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  .pipeline th { text-align: left; color: var(--muted); font-weight: 500; font-size: 0.78rem; padding-bottom: 0.4rem; }
+  .pipeline td { padding: 0.4rem 0; border-top: 1px solid var(--panel-border); }
+  .pipeline td:last-child, .pipeline th:last-child { text-align: right; }
+  .pipeline td:last-child { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .status { font-size: 0.82rem; }
+  .status.ok { color: var(--ok); }
+  .status.short { color: var(--warn); }
+  .status.err { color: var(--err); }
+  .incoming-line { display: block; font-size: 0.82rem; color: var(--muted); }
 </style>
 </head>
 <body>
-<header class="container">
-  <nav>
-    <ul><li><strong>Everest Plunge — Sales View</strong></li></ul>
-  </nav>
+<header class="top">
+  <div class="wrap">
+    <h1>🌿 Everest Plunge — Sales View</h1>
+    <div class="sub">Read-only — check stock before you quote. Need to log a sale or manage orders? That's the <a href="/ops">Operations Console</a> (ops login required).</div>
+  </div>
 </header>
-<p class="container"><small>Read-only — check stock before you quote. Need to log a sale or manage orders? That's the <a href="/ops">Operations Console</a> (ops login required).</small></p>
 
-<main class="container">
+<main class="wrap">
 
-  <section>
-    <h3>Check availability before you quote</h3>
-    <div class="grid">
-      <label>Product
-        <select id="sku"><option value="">— loading stock —</option></select>
-      </label>
-      <label>Quantity
-        <input type="number" id="quantity" min="1" value="1">
-      </label>
+  <h2 class="section-title">Check availability before you quote</h2>
+  <div class="card checker">
+    <div class="field">
+      <label>Product</label>
+      <select id="sku"><option value="">— loading stock —</option></select>
+    </div>
+    <div class="field" style="flex: 0 0 120px; min-width: 120px;">
+      <label>Quantity</label>
+      <input type="number" id="quantity" min="1" value="1">
     </div>
     <button id="check-btn">Check availability</button>
-    <p id="avail-result"></p>
-  </section>
+  </div>
+  <p id="avail-result"></p>
 
-  <section>
-    <h3>Stock Overview</h3>
-    <p><small>"On shore" is what's physically in the Silverdale warehouse right now. "Incoming" is pre-committed against a shipment still on the water — not sellable from stock today, but tell the customer when it lands.</small></p>
-    <table id="stock-table">
-      <thead>
-        <tr><th>SKU</th><th>Product</th><th>Model/Size</th><th>On shore now</th><th>Incoming (on the water)</th></tr>
-      </thead>
-      <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
-    </table>
-  </section>
+  <h2 class="section-title">Stock Pipeline</h2>
+  <p class="hint">What's on shore now, what's coming on each shipment, and what's not even ordered yet — read left to right.</p>
+  <div class="pipeline" id="pipeline-body">Loading…</div>
 
 </main>
 
@@ -75,47 +126,83 @@ function daysUntilClient(dateStr) {
   return Math.round((targetUTC - todayUTC) / msPerDay);
 }
 
-// Same case-insensitive batch-name matching used on /ops/batches — a
-// Stock Overview column header ("Batch 12") and whatever ops typed into
-// the Batch ETA form aren't guaranteed to match on case.
 function findEta(batchEtas, batchName) {
   const key = Object.keys(batchEtas).find((k) => k.toLowerCase() === batchName.toLowerCase());
   return key ? batchEtas[key] : null;
 }
 
-function incomingCell(breakdown, batchEtas) {
-  if (!breakdown || !breakdown.length) return '—';
-  return breakdown.map((b) => {
-    const eta = findEta(batchEtas, b.batch);
-    if (!eta) return `<span class="incoming-line">${b.quantity} on ${b.batch} <span class="status short">(no ETA set)</span></span>`;
-    const days = daysUntilClient(eta.eta);
-    const when = days === null ? '<span class="status err">invalid ETA</span>'
-      : days < 0 ? `<span class="status err">${eta.eta}, ${-days}d overdue</span>`
-      : days === 0 ? `<span class="status short">${eta.eta}, today</span>`
-      : `<span class="status ok">${eta.eta}, ~${days}d</span>`;
-    return `<span class="incoming-line">${b.quantity} on ${b.batch} — ${when}</span>`;
-  }).join('');
+function etaBadge(eta) {
+  if (!eta) return '<span class="status short">No ETA set</span>';
+  const days = daysUntilClient(eta.eta);
+  if (days === null) return '<span class="status err">Invalid ETA</span>';
+  if (days < 0) return `<span class="status err">${eta.eta} — ${-days}d overdue</span>`;
+  if (days === 0) return `<span class="status short">${eta.eta} — today</span>`;
+  return `<span class="status ok">${eta.eta} — ~${days}d</span>`;
 }
 
-async function loadStockOverview() {
-  const tbody = document.querySelector('#stock-table tbody');
+function extractBatchNumber(batchName) {
+  const match = batchName.match(/(\d+)/);
+  return match ? Number(match[1]) : Infinity;
+}
+
+let allProducts = [];
+
+async function loadPipeline() {
+  const body = $('pipeline-body');
   try {
-    const [stockData, etaData] = await Promise.all([api('/api/stock-overview'), api('/api/batch-etas')]);
+    const [stockData, etaData, toOrderData] = await Promise.all([
+      api('/api/stock-overview'), api('/api/batch-etas'), api('/api/products-to-order')
+    ]);
     const products = stockData.products || [];
+    allProducts = products;
     const batchEtas = etaData.batchEtas || {};
-    tbody.innerHTML = products.map((p) => `
-      <tr>
-        <td>${p.sku}</td><td>${p.productName}</td><td>${p.modelSize}</td>
-        <td><strong>${p.balance}</strong></td>
-        <td>${incomingCell(p.incomingBreakdown, batchEtas)}</td>
-      </tr>
+
+    const onShoreRows = products.map((p) => `
+      <tr><td>${p.productName} — ${p.modelSize}</td><td class="${p.balance < 0 ? 'status err' : ''}">${p.balance}</td></tr>
     `).join('');
+    const onShoreBlock = `
+      <div class="card">
+        <h3>Stock On Shore</h3>
+        <span class="badge">Available to sell today</span>
+        <table><thead><tr><th>Product</th><th>Available</th></tr></thead><tbody>${onShoreRows}</tbody></table>
+      </div>`;
+
+    const byBatch = new Map();
+    for (const p of products) {
+      for (const b of p.incomingBreakdown || []) {
+        if (!byBatch.has(b.batch)) byBatch.set(b.batch, []);
+        byBatch.get(b.batch).push({ label: `${p.productName} — ${p.modelSize}`, quantity: b.quantity });
+      }
+    }
+    const batchNames = [...byBatch.keys()].sort((a, b) => extractBatchNumber(a) - extractBatchNumber(b));
+    const batchBlocks = batchNames.map((name) => {
+      const rows = byBatch.get(name).map((r) => `<tr><td>${r.label}</td><td>${r.quantity}</td></tr>`).join('');
+      return `
+        <div class="card">
+          <h3>${name} <small style="font-weight:normal;color:var(--muted)">— on water</small></h3>
+          <span class="badge">${etaBadge(findEta(batchEtas, name))}</span>
+          <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${rows}</tbody></table>
+        </div>`;
+    }).join('');
+
+    const toOrder = toOrderData.products || [];
+    const toOrderRows = toOrder.length
+      ? toOrder.map((p) => `<tr><td>${p.product}</td><td>${p.totalQuantity}</td></tr>`).join('')
+      : '<tr><td colspan="2" style="color:var(--muted)">Nothing pending.</td></tr>';
+    const toOrderBlock = `
+      <div class="card">
+        <h3>Next Order <small style="font-weight:normal;color:var(--muted)">— not yet placed</small></h3>
+        <span class="badge">Waiting to be included in the next China order</span>
+        <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${toOrderRows}</tbody></table>
+      </div>`;
+
+    body.innerHTML = onShoreBlock + batchBlocks + toOrderBlock;
 
     const skuSelect = $('sku');
     skuSelect.innerHTML = '<option value="">— select a product —</option>' +
       products.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize})</option>`).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5">Failed to load: ${err.message}</td></tr>`;
+    body.innerHTML = `<div class="card">Failed to load: ${err.message}</div>`;
   }
 }
 
@@ -145,7 +232,7 @@ $('check-btn').addEventListener('click', async () => {
   }
 });
 
-loadStockOverview();
+loadPipeline();
 </script>
 </body>
 </html>
