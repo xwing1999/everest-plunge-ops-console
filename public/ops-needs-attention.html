@@ -84,6 +84,15 @@
   </section>
 
   <section class="card">
+    <h3>Stuck at "Deposit Invoice Sent" — actually paid in Xero</h3>
+    <p><small>Xero shows the deposit already paid, but the deal is still sitting at "3.1 - Deposit Invoice Sent" in Pipely — nobody dragged it to "3.2 - Deposit Paid". Dion in particular doesn't update Pipely regularly, so check his deals here. Move it manually in Pipely once you've confirmed it.</small></p>
+    <table id="stuck-deposit-paid-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Xero invoice #</th><th>Amount paid</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="card">
     <h3>Won deals with no stock allocated</h3>
     <p><small>Deal reached a won stage in Pipely but isn't in the Automation Log yet — no client should be won without stock allocated to them somewhere.</small></p>
     <table id="unallocated-table">
@@ -252,11 +261,28 @@ async function loadUnallocated() {
   }
 }
 
+async function loadStuckDepositPaid() {
+  const tbody = document.querySelector('#stuck-deposit-paid-table tbody');
+  try {
+    const data = await api('/api/stuck-deposit-paid');
+    const stuck = data.stuck || [];
+    if (!stuck.length) { tbody.innerHTML = '<tr><td colspan="4">Nothing stuck — Pipely stages match Xero.</td></tr>'; return; }
+    tbody.innerHTML = stuck.map((d) => `
+      <tr>
+        <td>${d.dealName}</td><td>${d.rep || '—'}</td>
+        <td>${d.xeroInvoiceNumber || '—'}</td><td>$${d.xeroAmountPaid}</td>
+      </tr>`).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
+  }
+}
+
 function loadAll() {
   loadPauseBanner();
   loadShopifyPaused();
   loadDepositFailures();
   loadInvoiceCheck();
+  loadStuckDepositPaid();
   loadUnallocated();
 }
 
