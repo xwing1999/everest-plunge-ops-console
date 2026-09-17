@@ -207,13 +207,18 @@ document.querySelector('#deposit-failures-table').addEventListener('click', asyn
   }
 });
 
+// Reads the cached snapshot (a plain Sheets read via stock-sheet-agent),
+// refreshed by pipely-xero-agent every 15 minutes — not a live Xero
+// cross-check on every page load, per Xavier: "I'm having a bit of delay
+// on loading times... I want everything to be recorded as it happens
+// inside of the spreadsheet."
 async function loadInvoiceCheck() {
   const mismatchBody = document.querySelector('#mismatch-table tbody');
   const missingBody = document.querySelector('#missing-table tbody');
   const notFoundBody = document.querySelector('#not-found-xero-table tbody');
   const checkFailedBody = document.querySelector('#check-failed-table tbody');
   try {
-    const data = await api('/api/invoice-check');
+    const data = await api('/api/payment-audit-cache');
 
     const mismatches = data.statusMismatch || [];
     mismatchBody.innerHTML = mismatches.length ? mismatches.map((m) => `

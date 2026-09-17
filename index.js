@@ -197,6 +197,27 @@ app.get('/api/stuck-deposit-paid', requireRole('ops'), async (_req, res) => {
   }
 });
 
+// Fast, cached read — a plain Sheets read via stock-sheet-agent, not a
+// live Xero cross-check. Use this for normal page loads.
+app.get('/api/payment-audit-cache', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/payment-audit-cache'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// Slow (~20s) — triggers pipely-xero-agent to actually re-run the live
+// Xero cross-check and write a fresh snapshot into the cache tab. Use
+// sparingly (a "Refresh now" button), not on every page load.
+app.post('/api/refresh-payment-audit', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/refresh-payment-audit-cache', { method: 'POST' }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Temporary — proxies pipely-xero-agent's temporary product diagnostic
 // (see that agent's own comment). Remove alongside it once answered.
 app.get('/api/pipely-product-diagnostic', requireRole('ops'), async (_req, res) => {

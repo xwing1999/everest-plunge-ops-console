@@ -38,7 +38,9 @@
 
   <h3>Payment Audit</h3>
   <p><small>Every won-stage deal with the real Xero invoices found for that customer — whether it's a 50% deposit + 50% final split or 100% upfront is a manual call on your side with nothing recorded in Pipely, so this doesn't guess which one applies. It just lays out what's actually in Xero (matched by customer, not just our own invoice tags) so you can eyeball whether it looks right during a scan. "Deal value" is Pipely's own field and is often $0/unreliable — treat "Xero invoices" as the real numbers.</small></p>
-  <button id="refresh-btn" class="secondary outline">Refresh</button>
+  <p id="cache-info"><small>Loading…</small></p>
+  <button id="refresh-btn" class="secondary outline">Refresh view</button>
+  <button id="rescan-btn" class="outline">Re-scan Xero now (~20s)</button>
   <div style="overflow-x:auto">
   <table id="audit-table">
     <thead>
@@ -68,11 +70,18 @@ function invoiceLines(invoices) {
   }).join('');
 }
 
+// Reads the cached snapshot (a plain Sheets read via stock-sheet-agent) --
+// fast, not a live Xero cross-check. See ops/payment-audit's "Re-scan"
+// button for triggering the slow real check.
 async function loadAudit() {
   const tbody = document.querySelector('#audit-table tbody');
+  const cacheInfo = $('cache-info');
   try {
-    const data = await api('/api/invoice-check');
+    const data = await api('/api/payment-audit-cache');
     const deals = data.deals || [];
+    cacheInfo.innerHTML = data.generatedAt
+      ? `<small>Last scanned: ${new Date(data.generatedAt).toLocaleString()} — refreshes automatically every 15 minutes.</small>`
+      : `<small>No scan yet — click "Re-scan Xero now" below.</small>`;
     if (!deals.length) { tbody.innerHTML = '<tr><td colspan="6">No won-stage deals to audit.</td></tr>'; return; }
     tbody.innerHTML = deals.map((d) => {
       const totalClass = !d.xeroTotalInvoicedToContact ? 'status err' : '';
@@ -81,7 +90,7 @@ async function loadAudit() {
           <td>${d.dealName}</td><td>${d.rep || '—'}</td><td>${d.stage}</td>
           <td>${d.dealValue ? '$' + d.dealValue : '—'}</td>
           <td>${invoiceLines(d.xeroInvoicesForContact)}</td>
-          <td class="${totalClass}">${d.xeroInvoicesForContact ? '$' + d.xeroTotalInvoicedToContact : (d.xeroCheckError ? 'Unverified' : '—')}</td>
+          <td class="${totalClass}">${d.xeroInvoicesForContact && d.xeroInvoicesForContact.length ? '$' + d.xeroTotalInvoicedToContact : (d.xeroCheckError ? 'Unverified' : '$0')}</td>
         </tr>`;
     }).join('');
   } catch (err) {
@@ -90,6 +99,16 @@ async function loadAudit() {
 }
 
 $('refresh-btn').addEventListener('click', loadAudit);
+$('rescan-btn').addEventListener('click', async () => {
+  const cacheInfo = $('cache-info');
+  cacheInfo.innerHTML = '<small>Re-scanning Xero now — this takes about 20 seconds…</small>';
+  try {
+    await api('/api/refresh-payment-audit', { method: 'POST' });
+    await loadAudit();
+  } catch (err) {
+    cacheInfo.innerHTML = `<small>Re-scan failed: ${err.message}</small>`;
+  }
+});
 loadAudit();
 </script>
 </body>
