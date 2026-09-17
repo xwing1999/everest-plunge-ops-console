@@ -350,6 +350,9 @@ app.get('/ops/stock', requireRole('ops'), (_req, res) => {
 app.get('/ops/batches', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-batches.html'));
 });
+app.get('/ops/allocations', requireRole('ops'), (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'ops-allocations.html'));
+});
 app.get('/ops/completed', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-completed.html'));
 });
