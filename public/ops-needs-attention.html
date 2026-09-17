@@ -100,6 +100,15 @@
     </table>
   </section>
 
+  <section class="card">
+    <h3>Couldn't check Xero for these — not a finding either way</h3>
+    <p><small>The Xero lookup itself failed for these deals (e.g. a rate limit) — they're not confirmed missing an invoice, just unverified this run. Refresh to re-check.</small></p>
+    <table id="check-failed-table">
+      <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Error</th></tr></thead>
+      <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
+    </table>
+  </section>
+
 </main>
 
 <script>
@@ -190,6 +199,7 @@ async function loadInvoiceCheck() {
   const mismatchBody = document.querySelector('#mismatch-table tbody');
   const missingBody = document.querySelector('#missing-table tbody');
   const notFoundBody = document.querySelector('#not-found-xero-table tbody');
+  const checkFailedBody = document.querySelector('#check-failed-table tbody');
   try {
     const data = await api('/api/invoice-check');
 
@@ -211,11 +221,17 @@ async function loadInvoiceCheck() {
     notFoundBody.innerHTML = notFound.length ? notFound.map((m) => `
       <tr><td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td><td>${m.invoiceNumber || '—'}</td></tr>
     `).join('') : '<tr><td colspan="4">Nothing found missing from Xero.</td></tr>';
+
+    const checkFailed = data.checkFailed || [];
+    checkFailedBody.innerHTML = checkFailed.length ? checkFailed.map((m) => `
+      <tr><td>${m.dealName}</td><td>${m.rep}</td><td>${m.stage}</td><td>${m.xeroCheckError || '—'}</td></tr>
+    `).join('') : '<tr><td colspan="4">Nothing to report — every deal was checked successfully.</td></tr>';
   } catch (err) {
     const msg = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;
     mismatchBody.innerHTML = msg;
     missingBody.innerHTML = msg;
     notFoundBody.innerHTML = msg;
+    checkFailedBody.innerHTML = msg;
   }
 }
 
