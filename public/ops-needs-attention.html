@@ -249,6 +249,7 @@ async function loadInvoiceCheck() {
   const notFoundBody = document.querySelector('#not-found-xero-table tbody');
   const checkFailedBody = document.querySelector('#check-failed-table tbody');
   const auditBody = document.querySelector('#audit-table tbody');
+  const stuckDepositPaidBody = document.querySelector('#stuck-deposit-paid-table tbody');
   const cacheInfo = $('cache-info');
   try {
     const data = await api('/api/payment-audit-cache');
@@ -256,6 +257,17 @@ async function loadInvoiceCheck() {
     cacheInfo.innerHTML = data.generatedAt
       ? `<small>Last scanned: ${new Date(data.generatedAt).toLocaleString()} — refreshes automatically every 15 minutes.</small>`
       : `<small>No scan yet — click "Re-scan Xero now" below.</small>`;
+
+    // Folded in from the old separate /api/stuck-deposit-paid live call
+    // 2026-09-20, per Xavier: "the api should be checking and then
+    // logging on the spreadsheet and not calling the whole system
+    // everytime." Same cached scan, not a fresh Xero hit on page load.
+    const stuck = data.stuckDepositPaid || [];
+    stuckDepositPaidBody.innerHTML = stuck.length ? stuck.map((d) => `
+      <tr>
+        <td>${d.dealName}</td><td>${d.rep || '—'}</td>
+        <td>${d.xeroDepositInvoiceNumber || '—'}</td><td>$${d.xeroDepositAmountPaid}</td>
+      </tr>`).join('') : '<tr><td colspan="4">Nothing stuck — Pipely stages match Xero.</td></tr>';
 
     const deals = data.deals || [];
     auditBody.innerHTML = deals.length ? deals.map((d) => {
@@ -302,6 +314,7 @@ async function loadInvoiceCheck() {
     notFoundBody.innerHTML = msg;
     checkFailedBody.innerHTML = msg;
     auditBody.innerHTML = msg;
+    stuckDepositPaidBody.innerHTML = msg;
     cacheInfo.innerHTML = `<small>Failed to load: ${err.message}</small>`;
   }
 }
@@ -333,28 +346,11 @@ async function loadUnallocated() {
   }
 }
 
-async function loadStuckDepositPaid() {
-  const tbody = document.querySelector('#stuck-deposit-paid-table tbody');
-  try {
-    const data = await api('/api/stuck-deposit-paid');
-    const stuck = data.stuck || [];
-    if (!stuck.length) { tbody.innerHTML = '<tr><td colspan="4">Nothing stuck — Pipely stages match Xero.</td></tr>'; return; }
-    tbody.innerHTML = stuck.map((d) => `
-      <tr>
-        <td>${d.dealName}</td><td>${d.rep || '—'}</td>
-        <td>${d.xeroInvoiceNumber || '—'}</td><td>$${d.xeroAmountPaid}</td>
-      </tr>`).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4">Failed to load: ${err.message}</td></tr>`;
-  }
-}
-
 function loadAll() {
   loadPauseBanner();
   loadShopifyPaused();
   loadDepositFailures();
   loadInvoiceCheck();
-  loadStuckDepositPaid();
   loadUnallocated();
 }
 

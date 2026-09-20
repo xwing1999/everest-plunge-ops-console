@@ -189,14 +189,6 @@ app.get('/api/unallocated-deals', requireRole('ops'), async (_req, res) => {
   }
 });
 
-app.get('/api/stuck-deposit-paid', requireRole('ops'), async (_req, res) => {
-  try {
-    res.json(await callPipelyXeroAgent('/admin/stuck-deposit-paid'));
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
 app.post('/api/add-stock-product', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/add-stock-product', { method: 'POST', body: req.body }));
