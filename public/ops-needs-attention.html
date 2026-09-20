@@ -225,7 +225,17 @@ document.querySelector('#deposit-failures-table').addEventListener('click', asyn
 // cross-check on every page load, per Xavier: "I'm having a bit of delay
 // on loading times... I want everything to be recorded as it happens
 // inside of the spreadsheet."
-function invoiceLines(invoices) {
+// checkError takes priority over an empty invoices list — a real bug
+// found 2026-09-20: Xavier saw a PDF export full of red "None found"
+// cells and asked "heaps of errors here?" when almost all of them were
+// actually just Xero rate-limit hits (the same deals already correctly
+// shown as "Unverified" in the Couldn't-check-Xero table above). This
+// function was showing "None found" regardless of WHY the list was
+// empty, contradicting that table and making a rate-limit blip look
+// like a wall of confirmed problems. Only a genuinely resolved, empty
+// check should say "None found" now.
+function invoiceLines(invoices, checkError) {
+  if (checkError) return '<span class="status short">Unverified this run</span>';
   if (!invoices || !invoices.length) return '<span class="status err">None found</span>';
   return invoices.map((inv) => {
     const cls = inv.amountDue > 0.01 ? 'status short' : 'status ok';
@@ -249,13 +259,16 @@ async function loadInvoiceCheck() {
 
     const deals = data.deals || [];
     auditBody.innerHTML = deals.length ? deals.map((d) => {
-      const totalClass = !d.xeroTotalInvoicedToContact ? 'status err' : '';
+      // Same checkError-first priority as invoiceLines() above — red only
+      // for a genuinely confirmed $0, not an unresolved check.
+      const totalClass = d.xeroCheckError ? 'status short' : (!d.xeroTotalInvoicedToContact ? 'status err' : '');
+      const totalText = d.xeroCheckError ? 'Unverified' : (d.xeroInvoicesForContact && d.xeroInvoicesForContact.length ? '$' + d.xeroTotalInvoicedToContact : '$0');
       return `
         <tr>
           <td>${d.dealName}</td><td>${d.rep || '—'}</td><td>${d.stage}</td>
           <td>${d.dealValue ? '$' + d.dealValue : '—'}</td>
-          <td>${invoiceLines(d.xeroInvoicesForContact)}</td>
-          <td class="${totalClass}">${d.xeroInvoicesForContact && d.xeroInvoicesForContact.length ? '$' + d.xeroTotalInvoicedToContact : (d.xeroCheckError ? 'Unverified' : '$0')}</td>
+          <td>${invoiceLines(d.xeroInvoicesForContact, d.xeroCheckError)}</td>
+          <td class="${totalClass}">${totalText}</td>
         </tr>`;
     }).join('') : '<tr><td colspan="6">No won-stage deals to audit.</td></tr>';
 
