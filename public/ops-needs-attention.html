@@ -221,10 +221,12 @@ document.querySelector('#deposit-failures-table').addEventListener('click', asyn
 });
 
 // Reads the cached snapshot (a plain Sheets read via stock-sheet-agent),
-// refreshed by pipely-xero-agent every 15 minutes — not a live Xero
-// cross-check on every page load, per Xavier: "I'm having a bit of delay
-// on loading times... I want everything to be recorded as it happens
-// inside of the spreadsheet."
+// refreshed by pipely-xero-agent every 90 minutes (raised from 15 on
+// 2026-09-20 after Xero's own X-Rate-Limit-Problem header confirmed the
+// persistent 429s were hitting a DAILY cap, not a per-minute one) — not a
+// live Xero cross-check on every page load, per Xavier: "I'm having a bit
+// of delay on loading times... I want everything to be recorded as it
+// happens inside of the spreadsheet."
 // checkError takes priority over an empty invoices list — a real bug
 // found 2026-09-20: Xavier saw a PDF export full of red "None found"
 // cells and asked "heaps of errors here?" when almost all of them were
@@ -255,7 +257,7 @@ async function loadInvoiceCheck() {
     const data = await api('/api/payment-audit-cache');
 
     cacheInfo.innerHTML = data.generatedAt
-      ? `<small>Last scanned: ${new Date(data.generatedAt).toLocaleString()} — refreshes automatically every 15 minutes.</small>`
+      ? `<small>Last scanned: ${new Date(data.generatedAt).toLocaleString()} — refreshes automatically every 90 minutes.</small>`
       : `<small>No scan yet — click "Re-scan Xero now" below.</small>`;
 
     // Folded in from the old separate /api/stuck-deposit-paid live call
