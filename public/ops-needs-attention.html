@@ -22,6 +22,7 @@
     border: 2px solid #b45309; background: rgba(180, 83, 9, 0.08);
     border-radius: 8px; padding: 0.8rem 1.1rem; margin-bottom: 1.5rem;
   }
+  .inv-line { display: block; font-size: 0.9em; }
 </style>
 </head>
 <body>
@@ -29,14 +30,11 @@
   <nav>
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
     <ul>
-      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops">Deals</a></li>
       <li><a href="/ops/log-sale">Log Sale</a></li>
-      <li><a href="/ops/stock">Stock on Shore</a></li>
-      <li><a href="/ops/batches">Batches</a></li>
-      <li><a href="/ops/allocations">Allocations</a></li>
-      <li><a href="/ops/payment-audit">Payment Audit</a></li>
+      <li><a href="/ops/stock">Stock</a></li>
       <li><a href="/ops/needs-attention">Needs Attention</a></li>
-      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/ops/completed">Completed</a></li>
       <li><a href="/sales">Sales view →</a></li>
     </ul>
   </nav>
@@ -119,6 +117,21 @@
       <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Error</th></tr></thead>
       <tbody><tr><td colspan="4">Loading…</td></tr></tbody>
     </table>
+  </section>
+
+  <section class="card">
+    <h3>Payment Audit — full breakdown, every deal</h3>
+    <p><small>Every won-stage deal with the real Xero invoices found for that customer — whether it's a 50% deposit + 50% final split or 100% upfront is a manual call on your side with nothing recorded in Pipely, so this doesn't guess which one applies. It just lays out what's actually in Xero (matched by customer, not just our own invoice tags) so you can eyeball whether it looks right during a scan. "Deal value" is Pipely's own field and is often $0/unreliable — treat "Xero invoices" as the real numbers.</small></p>
+    <p id="cache-info"><small>Loading…</small></p>
+    <button id="rescan-btn" class="outline">Re-scan Xero now (~20s)</button>
+    <div style="overflow-x:auto">
+    <table id="audit-table">
+      <thead>
+        <tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Deal value (Pipely)</th><th>Xero invoices</th><th>Total invoiced</th></tr>
+      </thead>
+      <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
+    </table>
+    </div>
   </section>
 
 </main>
@@ -212,13 +225,39 @@ document.querySelector('#deposit-failures-table').addEventListener('click', asyn
 // cross-check on every page load, per Xavier: "I'm having a bit of delay
 // on loading times... I want everything to be recorded as it happens
 // inside of the spreadsheet."
+function invoiceLines(invoices) {
+  if (!invoices || !invoices.length) return '<span class="status err">None found</span>';
+  return invoices.map((inv) => {
+    const cls = inv.amountDue > 0.01 ? 'status short' : 'status ok';
+    return `<span class="inv-line">${inv.invoiceNumber || '—'} (${inv.reference || 'no reference'}) — $${inv.total} <span class="${cls}">${inv.status}${inv.amountDue > 0.01 ? `, $${inv.amountDue} due` : ', paid'}</span></span>`;
+  }).join('');
+}
+
 async function loadInvoiceCheck() {
   const mismatchBody = document.querySelector('#mismatch-table tbody');
   const missingBody = document.querySelector('#missing-table tbody');
   const notFoundBody = document.querySelector('#not-found-xero-table tbody');
   const checkFailedBody = document.querySelector('#check-failed-table tbody');
+  const auditBody = document.querySelector('#audit-table tbody');
+  const cacheInfo = $('cache-info');
   try {
     const data = await api('/api/payment-audit-cache');
+
+    cacheInfo.innerHTML = data.generatedAt
+      ? `<small>Last scanned: ${new Date(data.generatedAt).toLocaleString()} — refreshes automatically every 15 minutes.</small>`
+      : `<small>No scan yet — click "Re-scan Xero now" below.</small>`;
+
+    const deals = data.deals || [];
+    auditBody.innerHTML = deals.length ? deals.map((d) => {
+      const totalClass = !d.xeroTotalInvoicedToContact ? 'status err' : '';
+      return `
+        <tr>
+          <td>${d.dealName}</td><td>${d.rep || '—'}</td><td>${d.stage}</td>
+          <td>${d.dealValue ? '$' + d.dealValue : '—'}</td>
+          <td>${invoiceLines(d.xeroInvoicesForContact)}</td>
+          <td class="${totalClass}">${d.xeroInvoicesForContact && d.xeroInvoicesForContact.length ? '$' + d.xeroTotalInvoicedToContact : (d.xeroCheckError ? 'Unverified' : '$0')}</td>
+        </tr>`;
+    }).join('') : '<tr><td colspan="6">No won-stage deals to audit.</td></tr>';
 
     const mismatches = data.statusMismatch || [];
     mismatchBody.innerHTML = mismatches.length ? mismatches.map((m) => `
@@ -249,8 +288,21 @@ async function loadInvoiceCheck() {
     missingBody.innerHTML = msg;
     notFoundBody.innerHTML = msg;
     checkFailedBody.innerHTML = msg;
+    auditBody.innerHTML = msg;
+    cacheInfo.innerHTML = `<small>Failed to load: ${err.message}</small>`;
   }
 }
+
+$('rescan-btn').addEventListener('click', async () => {
+  const cacheInfo = $('cache-info');
+  cacheInfo.innerHTML = '<small>Re-scanning Xero now — this takes about 20 seconds…</small>';
+  try {
+    await api('/api/refresh-payment-audit', { method: 'POST' });
+    await loadInvoiceCheck();
+  } catch (err) {
+    cacheInfo.innerHTML = `<small>Re-scan failed: ${err.message}</small>`;
+  }
+});
 
 async function loadUnallocated() {
   const tbody = document.querySelector('#unallocated-table tbody');

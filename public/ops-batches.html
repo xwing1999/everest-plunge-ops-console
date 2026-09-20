@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Everest Plunge — Batches</title>
+<title>Everest Plunge — Stock</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
 <style>
   body { padding-bottom: 4rem; }
@@ -42,14 +42,11 @@
   <nav>
     <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
     <ul>
-      <li><a href="/ops">Dashboard</a></li>
+      <li><a href="/ops">Deals</a></li>
       <li><a href="/ops/log-sale">Log Sale</a></li>
-      <li><a href="/ops/stock">Stock on Shore</a></li>
-      <li><a href="/ops/batches">Batches</a></li>
-      <li><a href="/ops/allocations">Allocations</a></li>
-      <li><a href="/ops/payment-audit">Payment Audit</a></li>
+      <li><a href="/ops/stock">Stock</a></li>
       <li><a href="/ops/needs-attention">Needs Attention</a></li>
-      <li><a href="/ops/completed">Completed Orders</a></li>
+      <li><a href="/ops/completed">Completed</a></li>
       <li><a href="/sales">Sales view →</a></li>
     </ul>
   </nav>
@@ -57,7 +54,7 @@
 
 <main class="container">
 
-  <h3>Batches</h3>
+  <h3>Stock</h3>
   <p><small>What's on shore now, what's coming on each shipment, and what's not even ordered yet — read left to right.</small></p>
   <div class="pipeline" id="pipeline-body">Loading…</div>
 
@@ -78,7 +75,7 @@
 
   <section class="card">
     <h3>Batch Arrived</h3>
-    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch Stock on Shore's In Stock count — do that separately in the sheet.</small></p>
+    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch the In Stock count above — do that separately in the sheet.</small></p>
     <div class="inline-form">
       <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
       <button id="mark-arrived-btn">Mark batch arrived</button>

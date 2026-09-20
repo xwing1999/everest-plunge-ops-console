@@ -381,18 +381,17 @@ app.get('/ops', requireRole('ops'), (_req, res) => {
 app.get('/ops/log-sale', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-log-sale.html'));
 });
+// Nav consolidated 2026-09-20 — Xavier: "the tabs up the top are trash,
+// we need them to be real world what we actually use." 9 tabs down to 5,
+// grouped by what staff actually do (Deals/Log Sale/Stock/Needs
+// Attention/Completed) instead of by data source. Old URLs redirect so
+// nothing bookmarked breaks.
 app.get('/ops/stock', requireRole('ops'), (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'ops-stock.html'));
-});
-app.get('/ops/batches', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-batches.html'));
 });
-app.get('/ops/allocations', requireRole('ops'), (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'ops-allocations.html'));
-});
-app.get('/ops/payment-audit', requireRole('ops'), (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'ops-payment-audit.html'));
-});
+app.get('/ops/batches', requireRole('ops'), (_req, res) => res.redirect('/ops/stock'));
+app.get('/ops/allocations', requireRole('ops'), (_req, res) => res.redirect('/ops'));
+app.get('/ops/payment-audit', requireRole('ops'), (_req, res) => res.redirect('/ops/needs-attention'));
 app.get('/ops/completed', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops-completed.html'));
 });
