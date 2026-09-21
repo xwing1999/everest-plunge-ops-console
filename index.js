@@ -226,6 +226,16 @@ app.post('/api/refresh-payment-audit', requireRole('ops'), async (_req, res) => 
   }
 });
 
+// Temporary — proxies stock-sheet-agent's one-off template spreadsheet
+// generator (see that agent's own comment). Remove alongside it.
+app.post('/api/generate-template-spreadsheet', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/generate-template-spreadsheet', { method: 'POST' }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Temporary — proxies pipely-xero-agent's temporary product diagnostic
 // (see that agent's own comment). Remove alongside it once answered.
 app.get('/api/pipely-product-diagnostic', requireRole('ops'), async (_req, res) => {
