@@ -236,6 +236,16 @@ app.post('/api/generate-template-spreadsheet', requireRole('ops'), async (_req, 
   }
 });
 
+// Temporary — proxies stock-sheet-agent's one-off finalize-clean-spreadsheet
+// migration (see that agent's own comment). Remove alongside it.
+app.post('/api/finalize-clean-spreadsheet', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/finalize-clean-spreadsheet', { method: 'POST' }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Temporary — proxies stock-sheet-agent's temporary generic-sheet read,
 // used to verify the template generator's output. Remove alongside it.
 app.get('/api/read-any-sheet', requireRole('ops'), async (req, res) => {
