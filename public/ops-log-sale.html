@@ -68,15 +68,16 @@
           <option value="">— pick one —</option>
           <option value="On Shore">On Shore — ships now</option>
           <option value="On Water">On Water — incoming batch</option>
+          <option value="In Production">In Production — ordered, not yet shipped</option>
           <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
         </select>
       </label>
-      <label>Batch reference <small>(if On Water)</small>
+      <label>Batch reference <small>(if On Water or In Production)</small>
         <input type="text" id="batchReference" placeholder="e.g. Batch 12">
       </label>
     </div>
     <div class="grid">
-      <label>Expected date <small>(ETA, if On Water)</small>
+      <label>Expected date <small>(ETA, if On Water or In Production)</small>
         <input type="date" id="expectedDate">
       </label>
       <label>Source
