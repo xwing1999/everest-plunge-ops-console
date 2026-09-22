@@ -247,6 +247,15 @@ app.get('/api/read-any-sheet', requireRole('ops'), async (req, res) => {
   }
 });
 
+// Temporary — proxies stock-sheet-agent's which-sheet diagnostic. Remove alongside it.
+app.get('/api/which-sheet', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/which-sheet'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // Temporary — proxies pipely-xero-agent's temporary product diagnostic
 // (see that agent's own comment). Remove alongside it once answered.
 app.get('/api/pipely-product-diagnostic', requireRole('ops'), async (_req, res) => {
