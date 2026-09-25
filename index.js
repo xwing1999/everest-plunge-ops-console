@@ -288,6 +288,14 @@ app.post('/api/log-sold-deal', requireRole('ops'), async (req, res) => {
   }
 });
 
+app.post('/api/edit-deal', requireRole('ops'), async (req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/edit-deal', { method: 'POST', body: req.body }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.post('/api/mark-order-sent', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/mark-order-sent', { method: 'POST', body: req.body }));

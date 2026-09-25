@@ -73,6 +73,79 @@
 
 </main>
 
+<dialog id="edit-dialog">
+  <article style="max-width:560px">
+    <h3>Edit order <span id="edit-order-id"></span></h3>
+    <p><small>Fixes the line item itself — the stock/batch it's linked to moves with it automatically. Payment status isn't editable here; use the action buttons on the Deals table for that.</small></p>
+    <form id="edit-form">
+      <div class="grid">
+        <label>Customer name
+          <input type="text" id="edit-customerName" required>
+        </label>
+        <label>Email
+          <input type="email" id="edit-email">
+        </label>
+      </div>
+      <div class="grid">
+        <label>SKU
+          <input type="text" id="edit-sku">
+        </label>
+        <label>Quantity
+          <input type="number" id="edit-quantity" min="1">
+        </label>
+      </div>
+      <label>Delivery address
+        <input type="text" id="edit-deliveryAddress">
+      </label>
+      <div class="grid">
+        <label>Deal value (NZD)
+          <input type="number" id="edit-dealValue" step="0.01">
+        </label>
+        <label>Deposit status
+          <select id="edit-depositStatus">
+            <option>Not yet invoiced</option>
+            <option>Deposit invoiced</option>
+            <option>Deposit paid</option>
+            <option>Paid in full</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid">
+        <label>Allocation
+          <select id="edit-allocation">
+            <option value="On Shore">On Shore — ships now</option>
+            <option value="On Water">On Water — incoming batch</option>
+            <option value="In Production">In Production — ordered, not yet shipped</option>
+            <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
+          </select>
+        </label>
+        <label>Batch reference <small>(if On Water)</small>
+          <input type="text" id="edit-batchReference" placeholder="e.g. Batch 12">
+        </label>
+      </div>
+      <div class="grid">
+        <label>Expected date
+          <input type="date" id="edit-expectedDate">
+        </label>
+        <label>Ship target date
+          <input type="date" id="edit-shipTargetDate">
+        </label>
+      </div>
+      <label>External ref <small>(Pipely opportunity ID, if linked)</small>
+        <input type="text" id="edit-externalRef">
+      </label>
+      <label>Notes
+        <input type="text" id="edit-notes">
+      </label>
+      <p id="edit-result"></p>
+      <div class="grid">
+        <button type="submit">Save changes</button>
+        <button type="button" id="edit-cancel" class="secondary">Cancel</button>
+      </div>
+    </form>
+  </article>
+</dialog>
+
 <script>
 const $ = (id) => document.getElementById(id);
 
@@ -171,18 +244,22 @@ function shipEtaCell(e) {
   return `<div>${date}</div><div class="status ok">${days}d</div>`;
 }
 
+const dealsById = new Map(); // Order ID -> entry, kept fresh on every load so Edit can pre-fill without a second fetch
+
 async function loadAutomationLog() {
   const tbody = document.querySelector('#log-table tbody');
   try {
     const data = await api('/api/automation-log');
     const entries = (data.entries || []).slice().reverse();
+    dealsById.clear();
+    for (const e of data.entries || []) dealsById.set(e['Order ID'], e);
     if (!entries.length) { tbody.innerHTML = '<tr><td colspan="9">No orders logged yet.</td></tr>'; return; }
     tbody.innerHTML = entries.map((e) => `<tr>
         <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
         <td>${e['Quantity']}</td><td>${e['Status'] || ''}</td>
         <td>${e['Deposit Status']}</td><td>${e['Final Payment Status'] || '—'}</td>
         <td>${shipEtaCell(e)}</td>
-        <td>${actionForEntry(e)}</td>
+        <td>${actionForEntry(e)} <button class="edit-deal outline secondary" data-order="${e['Order ID']}">Edit</button></td>
       </tr>`).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="9">Failed to load: ${err.message}</td></tr>`;
@@ -191,9 +268,73 @@ async function loadAutomationLog() {
 
 // Shared by #log-table and #ready-to-book-body — same order actions,
 // two different places they can be triggered from.
+function openEditDialog(orderId) {
+  const e = dealsById.get(orderId);
+  if (!e) { alert('Could not find that order — try refreshing.'); return; }
+  $('edit-order-id').textContent = orderId;
+  $('edit-customerName').value = e['Customer Name'] || '';
+  $('edit-email').value = e['Email'] || '';
+  $('edit-sku').value = e['SKU'] || '';
+  $('edit-quantity').value = e['Quantity'] || '';
+  $('edit-deliveryAddress').value = e['Delivery Address'] || '';
+  $('edit-dealValue').value = e['Deal Value'] || '';
+  $('edit-depositStatus').value = e['Deposit Status'] || 'Not yet invoiced';
+  $('edit-allocation').value = e['Allocation'] || 'On Shore';
+  $('edit-batchReference').value = e['Batch Reference'] || '';
+  $('edit-expectedDate').value = e['Expected Date'] || '';
+  $('edit-shipTargetDate').value = e['Ship Target Date'] || '';
+  $('edit-externalRef').value = e['External Ref'] || '';
+  $('edit-notes').value = e['Notes'] || '';
+  $('edit-result').textContent = '';
+  $('edit-form').dataset.orderId = orderId;
+  $('edit-dialog').showModal();
+}
+
+$('edit-cancel').addEventListener('click', () => $('edit-dialog').close());
+
+$('edit-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const orderId = ev.target.dataset.orderId;
+  const result = $('edit-result');
+  result.textContent = 'Saving…';
+  try {
+    const data = await api('/api/edit-deal', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderId,
+        customerName: $('edit-customerName').value,
+        email: $('edit-email').value,
+        sku: $('edit-sku').value,
+        quantity: $('edit-quantity').value,
+        deliveryAddress: $('edit-deliveryAddress').value,
+        dealValue: $('edit-dealValue').value,
+        depositStatus: $('edit-depositStatus').value,
+        allocation: $('edit-allocation').value,
+        batchReference: $('edit-batchReference').value,
+        expectedDate: $('edit-expectedDate').value,
+        shipTargetDate: $('edit-shipTargetDate').value,
+        externalRef: $('edit-externalRef').value,
+        notes: $('edit-notes').value
+      })
+    });
+    const claim = data.unitClaim;
+    let claimNote = '';
+    if (claim) claimNote = claim.claimed ? ` Linked to a unit in "${claim.tabName}".` : ` (${claim.reason})`;
+    result.textContent = `Saved.${claimNote}`;
+    await loadAutomationLog();
+    await loadReadyToBook();
+    await loadAllocations();
+    setTimeout(() => $('edit-dialog').close(), claim && !claim.claimed ? 2500 : 700);
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
 async function handleOrderActionClick(ev) {
   const orderId = ev.target.dataset.order;
   if (!orderId) return;
+
+  if (ev.target.classList.contains('edit-deal')) { openEditDialog(orderId); return; }
 
   try {
     if (ev.target.classList.contains('mark-sent')) {
