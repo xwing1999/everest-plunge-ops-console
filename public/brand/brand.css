@@ -85,6 +85,8 @@ button, [role="button"], input[type="submit"] {
   border-radius: 4px;
 }
 section.card { border-top: 3px solid var(--ep-blue); }
+.inline-form select, .inline-form input, .inline-form button { width: auto; margin: 0; }
+.inline-form select { max-width: 26rem; }
 details summary::after { filter: none; }
 
 /* Stock location tabs */
