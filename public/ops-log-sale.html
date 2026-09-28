@@ -30,6 +30,10 @@
   <h3>Log a Sold Deal</h3>
   <p><small>Adds a new order to the Automation Log — this is what makes it show up on the Dashboard, Batches, and every cross-check on Needs Attention.</small></p>
   <form id="deal-form">
+    <label>Pipely deal <small>(won deals with no stock yet — picking one fills in the customer and links this entry to the deal)</small>
+      <select id="pipelyDeal"><option value="">— loading won deals —</option></select>
+    </label>
+    <input type="hidden" id="externalRef">
     <div class="grid">
       <label>Customer name*
         <input type="text" id="customerName" required>
@@ -39,8 +43,8 @@
       </label>
     </div>
     <div class="grid">
-      <label>Product (SKU)
-        <select id="sku"><option value="">— loading stock —</option></select>
+      <label>Product (SKU)*
+        <select id="sku" required><option value="">— loading stock —</option></select>
       </label>
       <label>Quantity
         <input type="number" id="quantity" min="1" value="1">
@@ -63,8 +67,8 @@
       </label>
     </div>
     <div class="grid">
-      <label>Allocation
-        <select id="allocation">
+      <label>Allocation*
+        <select id="allocation" required>
           <option value="">— pick one —</option>
           <option value="On Shore">On Shore — ships now</option>
           <option value="On Water">On Water — incoming batch</option>
@@ -72,8 +76,8 @@
           <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
         </select>
       </label>
-      <label>Batch reference <small>(if On Water or In Production)</small>
-        <input type="text" id="batchReference" placeholder="e.g. Batch 12">
+      <label>Batch <small>(required for On Water / In Production)</small>
+        <select id="batchReference" disabled><option value="">— not needed —</option></select>
       </label>
     </div>
     <div class="grid">
@@ -120,11 +124,67 @@ async function loadStockOptions() {
   }
 }
 
+// Won Pipely deals not yet logged/allocated — picking one pre-fills the
+// customer and sets External Ref, so the entry is linked to its deal and
+// drops off Needs Attention's "no stock allocated" list.
+let wonDeals = [];
+async function loadWonDeals() {
+  const sel = $('pipelyDeal');
+  try {
+    const data = await api('/api/unallocated-deals');
+    wonDeals = data.unallocated || [];
+    sel.innerHTML = '<option value="">— not from Pipely / enter manually —</option>' +
+      wonDeals.map((d) => `<option value="${d.opportunityId}">${d.dealName} — ${d.rep || ''} — ${d.stage}${d.dealValue ? ' — $' + d.dealValue : ''}</option>`).join('');
+  } catch (err) {
+    sel.innerHTML = `<option value="">Couldn't load Pipely deals: ${err.message}</option>`;
+  }
+}
+
+$('pipelyDeal').addEventListener('change', () => {
+  const d = wonDeals.find((x) => x.opportunityId === $('pipelyDeal').value);
+  $('externalRef').value = d ? d.opportunityId : '';
+  if (!d) return;
+  $('customerName').value = d.dealName.replace(/^(FB|WEB|HS)\s*-\s*/i, '').replace(/\s*-\s*Appt:.*$/i, '');
+  $('email').value = d.contactEmail || '';
+  if (d.dealValue) $('dealValue').value = d.dealValue;
+  $('source').value = 'Pipely';
+});
+
+// Batch is picked from the batches that actually exist in the sheet, so a
+// typo can't leave a deal unlinked (Amber Morrison, 2026-09-28, was logged
+// In Production with no batch and landed on no unit).
+let unitTabs = [];
+async function loadBatches() {
+  try { unitTabs = (await api('/api/unit-stock')).tabs || []; } catch { unitTabs = []; }
+  refreshBatchOptions();
+}
+
+function refreshBatchOptions() {
+  const allocation = $('allocation').value;
+  const sel = $('batchReference');
+  const stage = allocation === 'On Water' ? 'On Water' : allocation === 'In Production' ? 'In Production' : null;
+  if (!stage) { sel.innerHTML = '<option value="">— not needed —</option>'; sel.disabled = true; sel.required = false; return; }
+  const batches = unitTabs.filter((t) => t.stage === stage && t.batch);
+  sel.disabled = false;
+  sel.required = true;
+  sel.innerHTML = batches.length
+    ? '<option value="">— pick a batch —</option>' + batches.map((t) => {
+        const free = t.products.find((p) => p.sku === $('sku').value)?.available;
+        return `<option value="${t.batch}">${t.batch}${free !== undefined ? ` — ${free} of this product free` : ''}</option>`;
+      }).join('')
+    : `<option value="">No ${stage} batches exist${stage === 'In Production' ? ' — start one on the Stock page first' : ''}</option>`;
+}
+
+$('allocation').addEventListener('change', refreshBatchOptions);
+$('sku').addEventListener('change', refreshBatchOptions);
+
 $('deal-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const result = $('deal-result');
-  result.textContent = 'Logging…';
   const skuValue = $('sku').value === '__other__' ? '' : $('sku').value;
+  if (!$('allocation').value) { result.textContent = 'Pick an allocation — every sold deal needs stock allocated.'; return; }
+  if (!$('batchReference').disabled && !$('batchReference').value) { result.textContent = 'Pick the batch this unit is on.'; return; }
+  result.textContent = 'Logging…';
   try {
     const data = await api('/api/log-sold-deal', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -140,6 +200,7 @@ $('deal-form').addEventListener('submit', async (ev) => {
         batchReference: $('batchReference').value,
         expectedDate: $('expectedDate').value,
         source: $('source').value,
+        externalRef: $('externalRef').value || undefined,
         notes: $('notes').value
       })
     });
@@ -149,13 +210,18 @@ $('deal-form').addEventListener('submit', async (ev) => {
       : ` Not linked to a unit: ${claim.reason}`;
     result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}.${claimNote}`;
     $('deal-form').reset();
+    $('externalRef').value = '';
     loadStockOptions();
+    loadWonDeals();
+    loadBatches();
   } catch (err) {
     result.textContent = 'Failed: ' + err.message;
   }
 });
 
 loadStockOptions();
+loadWonDeals();
+loadBatches();
 </script>
 </body>
 </html>
