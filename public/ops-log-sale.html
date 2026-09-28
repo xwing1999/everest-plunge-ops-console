@@ -127,9 +127,9 @@ async function loadStockOptions() {
     // unit claim), not the manual Stock Overview tab (audit 2026-09-28).
     const [overview, units] = await Promise.all([api('/api/stock-overview').catch(() => ({ products: [] })), api('/api/unit-stock')]);
     const bySku = new Map();
-    for (const p of overview.products || []) bySku.set(p.sku, { sku: p.sku, name: `${p.productName} (${p.modelSize})`, shore: 0, incoming: 0 });
+    for (const p of overview.products || []) bySku.set(p.sku, { sku: p.sku, name: epLabel(p.productName, p.modelSize), shore: 0, incoming: 0 });
     for (const t of units.tabs || []) for (const p of t.products) {
-      if (!bySku.has(p.sku)) bySku.set(p.sku, { sku: p.sku, name: `${p.product} (${p.modelSize})`, shore: 0, incoming: 0 });
+      if (!bySku.has(p.sku)) bySku.set(p.sku, { sku: p.sku, name: epLabel(p.product, p.modelSize), shore: 0, incoming: 0 });
       const row = bySku.get(p.sku);
       if (t.stage === 'On Shore') row.shore += p.available;
       else if (t.stage !== 'Next Custom Order') row.incoming += p.available;

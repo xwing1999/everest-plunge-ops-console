@@ -307,7 +307,7 @@ function renderStockTab() {
           </div></td></tr>` : '';
         return `
           <tr class="product-line" data-key="${esc(key)}">
-            <td><span class="caret">${open ? '▾' : '▸'}</span> ${esc(p.product)} — ${esc(p.modelSize)} <small class="notes">${esc(p.sku)}</small><div>${tag}</div></td>
+            <td><span class="caret">${open ? '▾' : '▸'}</span> ${esc(epLabel(p.product, p.modelSize))} <small class="notes">${esc(p.sku)}</small><div>${tag}</div></td>
             <td>${p.total}</td>
             <td>${p.allocated}</td>
             <td class="${p.available ? 'status ok' : ''}"><strong>${p.available}</strong></td>
@@ -332,7 +332,7 @@ function renderStockTab() {
 
 function catalogOptions() {
   const seen = new Map();
-  for (const t of unitStock.tabs) for (const p of t.products) if (!seen.has(p.sku)) seen.set(p.sku, `${p.product} — ${p.modelSize}`);
+  for (const t of unitStock.tabs) for (const p of t.products) if (!seen.has(p.sku)) seen.set(p.sku, epLabel(p.product, p.modelSize));
   return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]))
     .map(([sku, name]) => `<option value="${esc(sku)}">${esc(sku)} — ${esc(name)}</option>`).join('');
 }
@@ -587,7 +587,7 @@ async function loadProductOptions() {
   try {
     const data = await api('/api/stock-overview');
     productOptions = (data.products || [])
-      .map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} ${p.modelSize || ''}</option>`).join('');
+      .map((p) => `<option value="${p.sku}">${p.sku} — ${epLabel(p.productName, p.modelSize)}</option>`).join('');
   } catch (err) {
     productOptions = '';
     $('prod-result').textContent = 'Could not load products: ' + err.message;
@@ -619,7 +619,7 @@ function renderQueuePicker() {
   box.style.display = '';
   box.innerHTML = waiting.length
     ? '<p><small>Tick who is on this batch:</small></p>' + waiting.map((u) => `
-        <label style="display:block"><input type="checkbox" class="queue-pick" value="${esc(u.orderId)}"> ${esc(u.allocatedTo)} — ${esc(u.product)} ${esc(u.modelSize)} <span class="notes">${esc(u.sku)}</span></label>`).join('')
+        <label style="display:block"><input type="checkbox" class="queue-pick" value="${esc(u.orderId)}"> ${esc(u.allocatedTo)} — ${esc(epLabel(u.product, u.modelSize))} <span class="notes">${esc(u.sku)}</span></label>`).join('')
     : '<p><small>Nobody is waiting in Next Custom Order.</small></p>';
 }
 $('prodPull').addEventListener('change', renderQueuePicker);
