@@ -47,7 +47,7 @@ body > header.container {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 body > header.container nav { flex-wrap: wrap; }
-.ep-logo { display: inline-flex; align-items: center; padding: 0.25rem 0 !important; }
+.ep-logo { display: inline-flex; align-items: center; padding: 0.25rem 0 !important; border-bottom: none !important; text-decoration: none !important; }
 .ep-logo img { height: 44px; width: auto; display: block; }
 body > header.container nav a {
   color: var(--ep-black) !important;
