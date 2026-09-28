@@ -112,6 +112,9 @@
         <label>Deal value (NZD)
           <input type="number" id="edit-dealValue" step="0.01">
         </label>
+        <label>Freight sold (NZD)
+          <input type="number" id="edit-freightSold" step="0.01">
+        </label>
         <label>Deposit status
           <select id="edit-depositStatus">
             <option>Not yet invoiced</option>
@@ -281,7 +284,7 @@ function renderOrders() {
   $('active-count').textContent = `(${active.length})`;
   $('active-body').innerHTML = active.length ? `
     <table class="orders">
-      <thead><tr><th>Customer</th><th>Product</th><th>Delivery address</th><th>Stock</th><th>Ship ETA</th><th>Value</th><th>Deposit</th><th>Final</th><th>Notes</th><th>Next step</th></tr></thead>
+      <thead><tr><th>Customer</th><th>Product</th><th>Delivery address</th><th>Stock</th><th>Ship ETA</th><th>Value</th><th>Freight</th><th>Deposit</th><th>Final</th><th>Notes</th><th>Next step</th></tr></thead>
       <tbody>${active.map((e) => `
         <tr class="${isReadyToBook(e) ? 'row-ready' : ''}">
           <td>${customerCell(e)}<div class="notes">${esc(e['Order ID'])}</div></td>
@@ -290,6 +293,7 @@ function renderOrders() {
           <td>${whereCell(e, unitTabsByOrder)}</td>
           <td>${shipEtaCell(e)}</td>
           <td>${money(e['Deal Value'])}</td>
+          <td>${money(e['Freight Sold'])}</td>
           <td>${esc(e['Deposit Status']) || '—'}</td>
           <td>${esc(e['Final Payment Status']) || '—'}</td>
           <td class="notes">${esc(e['Notes'])}</td>
@@ -302,7 +306,7 @@ function renderOrders() {
   $('completed-count').textContent = `(${done.length})`;
   $('completed-body').innerHTML = done.length ? `
     <table class="orders">
-      <thead><tr><th>Sent</th><th>Customer</th><th>Product</th><th>Delivery address</th><th>Courier</th><th>Tracking #</th><th>Value</th><th>Payment</th><th>Notes</th><th></th></tr></thead>
+      <thead><tr><th>Sent</th><th>Customer</th><th>Product</th><th>Delivery address</th><th>Courier</th><th>Tracking #</th><th>Value</th><th>Freight</th><th>Payment</th><th>Notes</th><th></th></tr></thead>
       <tbody>${done.map((e) => `
         <tr>
           <td>${esc(e['Order Sent Date'])}</td>
@@ -312,6 +316,7 @@ function renderOrders() {
           <td>${esc(e['Courier']) || '—'}</td>
           <td>${esc(e['Tracking #']) || '—'}</td>
           <td>${money(e['Deal Value'])}</td>
+          <td>${money(e['Freight Sold'])}</td>
           <td>${esc(e['Deposit Status'] === 'Paid in full' ? 'Paid in full' : e['Final Payment Status'] || e['Deposit Status'])}</td>
           <td class="notes">${esc(e['Notes'])}</td>
           <td><button class="edit-deal outline secondary" data-order="${esc(e['Order ID'])}">Edit</button></td>
@@ -370,6 +375,7 @@ function openEditDialog(orderId) {
   $('edit-quantity').value = e['Quantity'] || '';
   $('edit-deliveryAddress').value = e['Delivery Address'] || '';
   $('edit-dealValue').value = e['Deal Value'] || '';
+  $('edit-freightSold').value = e['Freight Sold'] || '';
   $('edit-depositStatus').value = e['Deposit Status'] || 'Not yet invoiced';
   $('edit-allocation').value = e['Allocation'] || '';
   $('edit-batchReference').value = e['Batch Reference'] || '';
@@ -401,6 +407,7 @@ $('edit-form').addEventListener('submit', async (ev) => {
         quantity: $('edit-quantity').value,
         deliveryAddress: $('edit-deliveryAddress').value,
         dealValue: $('edit-dealValue').value,
+        freightSold: $('edit-freightSold').value,
         depositStatus: $('edit-depositStatus').value,
         allocation: $('edit-allocation').value,
         batchReference: $('edit-batchReference').value,

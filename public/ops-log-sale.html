@@ -60,6 +60,9 @@
       <label>Deal value (NZD)
         <input type="number" id="dealValue" step="0.01">
       </label>
+      <label>Freight sold (NZD) <small>(what the customer was charged for freight)</small>
+        <input type="number" id="freightSold" step="0.01">
+      </label>
       <label>Deposit status
         <select id="depositStatus">
           <option>Not yet invoiced</option>
@@ -206,6 +209,7 @@ $('deal-form').addEventListener('submit', async (ev) => {
         customerName: $('customerName').value,
         email: $('email').value,
         phone: $('phone').value,
+        freightSold: $('freightSold').value ? Number($('freightSold').value) : undefined,
         sku: skuValue,
         quantity: Number($('quantity').value) || undefined,
         deliveryAddress: $('deliveryAddress').value,
