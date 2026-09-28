@@ -312,6 +312,14 @@ app.post('/api/mark-batch-arrived', requireRole('ops'), async (req, res) => {
   }
 });
 
+app.get('/api/suggest-allocations', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/suggest-allocations'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/api/unit-stock', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/unit-stock'));
