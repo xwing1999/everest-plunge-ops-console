@@ -55,8 +55,9 @@
 <main class="container">
 
   <h3>Stock</h3>
-  <p><small>What's on shore now, what's coming on each shipment, and what's not even ordered yet — read left to right.</small></p>
-  <div class="pipeline" id="pipeline-body">Loading…</div>
+  <p><small>Read straight from the unit rows in the spreadsheet — one row per physical sauna — so anything entered directly in the sheet shows here too. Pick a location to see what's allocated and what's free.</small></p>
+  <div id="stock-tabs" role="group" style="flex-wrap:wrap"></div>
+  <div id="pipeline-body">Loading…</div>
 
   <section class="card">
     <h3>Batch ETA (Countdown)</h3>
@@ -183,57 +184,82 @@ function extractBatchNumber(batchName) {
   return match ? Number(match[1]) : Infinity;
 }
 
+// Xavier (2026-09-28): flick between Stock On Shore / each batch / Next
+// Custom Order, and per product see e.g. "Obsidian 4 Person — 4 total,
+// 2 allocated, 2 available". Built from /api/unit-stock (the unit rows
+// themselves), not the aggregate Stock Overview tab.
+let unitStock = null;
+let unitEtas = {};
+let selectedStockTab = null;
+
+function stockTabLabel(t) {
+  return t.stage === 'On Shore' || t.stage === 'Next Custom Order' ? t.tabName : `${t.batch} — ${t.stage}`;
+}
+
+function esc(s) {
+  return (s ?? '').toString().replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function renderStockTab() {
+  const tabs = unitStock.tabs;
+  $('stock-tabs').innerHTML = tabs.map((t) => {
+    const allocated = t.products.reduce((n, p) => n + p.allocated, 0);
+    const total = t.products.reduce((n, p) => n + p.total, 0);
+    return `<button class="stock-tab ${t.tabName === selectedStockTab ? '' : 'outline'}" data-tab="${esc(t.tabName)}">${esc(stockTabLabel(t))} <small>(${allocated}/${total})</small></button>`;
+  }).join('');
+
+  const t = tabs.find((x) => x.tabName === selectedStockTab);
+  if (!t) { $('pipeline-body').innerHTML = '<p>No stock tabs found in the sheet.</p>'; return; }
+
+  const etaLine = t.batch ? `<p>${etaBadge(findEta(unitEtas, t.batch))}</p>` : '';
+  const productRows = t.products.length
+    ? t.products.map((p) => `
+        <tr>
+          <td>${esc(p.product)} — ${esc(p.modelSize)} <small class="notes">${esc(p.sku)}</small></td>
+          <td>${p.total}</td>
+          <td>${p.allocated}</td>
+          <td class="${p.available ? 'status ok' : ''}"><strong>${p.available}</strong></td>
+        </tr>`).join('')
+    : '<tr><td colspan="4">No units in this tab.</td></tr>';
+
+  const unitRows = t.units.map((u) => `
+    <tr>
+      <td>${esc(u.product)} — ${esc(u.modelSize)}</td>
+      <td>${u.allocated ? esc(u.allocatedTo) || '<em>(no name)</em>' : '<span class="status ok">Available</span>'}</td>
+      <td>${esc(u.contact)}</td><td>${esc(u.status)}</td><td class="notes">${esc(u.notes)}</td>
+    </tr>`).join('');
+
+  $('pipeline-body').innerHTML = `
+    ${etaLine}
+    <table>
+      <thead><tr><th>Product</th><th>Total</th><th>Allocated</th><th>Available</th></tr></thead>
+      <tbody>${productRows}</tbody>
+    </table>
+    <details>
+      <summary>Every unit in ${esc(t.tabName)} (${t.units.length})</summary>
+      <table>
+        <thead><tr><th>Product</th><th>Allocated To</th><th>Contact</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>${unitRows || '<tr><td colspan="5">None.</td></tr>'}</tbody>
+      </table>
+    </details>`;
+}
+
+$('stock-tabs').addEventListener('click', (ev) => {
+  const btn = ev.target.closest('.stock-tab');
+  if (!btn) return;
+  selectedStockTab = btn.dataset.tab;
+  renderStockTab();
+});
+
 async function loadPipeline() {
-  const body = $('pipeline-body');
   try {
-    const [stockData, etaData, toOrderData] = await Promise.all([
-      api('/api/stock-overview'), api('/api/batch-etas'), api('/api/products-to-order')
-    ]);
-    const products = stockData.products || [];
-    const batchEtas = etaData.batchEtas || {};
-
-    const onShoreRows = products.map((p) => `
-      <tr><td>${p.productName} — ${p.modelSize}</td><td class="${p.balance < 0 ? 'status err' : ''}">${p.balance}</td></tr>
-    `).join('');
-    const onShoreBlock = `
-      <div class="pipeline-block">
-        <h4>Stock On Shore</h4>
-        <div class="sub">Available to sell today</div>
-        <table><thead><tr><th>Product</th><th>Available</th></tr></thead><tbody>${onShoreRows}</tbody></table>
-      </div>`;
-
-    const byBatch = new Map();
-    for (const p of products) {
-      for (const b of p.incomingBreakdown || []) {
-        if (!byBatch.has(b.batch)) byBatch.set(b.batch, []);
-        byBatch.get(b.batch).push({ label: `${p.productName} — ${p.modelSize}`, quantity: b.quantity });
-      }
-    }
-    const batchNames = [...byBatch.keys()].sort((a, b) => extractBatchNumber(a) - extractBatchNumber(b));
-    const batchBlocks = batchNames.map((name) => {
-      const rows = byBatch.get(name).map((r) => `<tr><td>${r.label}</td><td>${r.quantity}</td></tr>`).join('');
-      return `
-        <div class="pipeline-block">
-          <h4>${name} <small style="font-weight:normal">— on water</small></h4>
-          <div class="sub">${etaBadge(findEta(batchEtas, name))}</div>
-          <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${rows}</tbody></table>
-        </div>`;
-    }).join('');
-
-    const toOrder = toOrderData.products || [];
-    const toOrderRows = toOrder.length
-      ? toOrder.map((p) => `<tr><td>${p.product}</td><td>${p.totalQuantity}</td></tr>`).join('')
-      : '<tr><td colspan="2">Nothing pending.</td></tr>';
-    const toOrderBlock = `
-      <div class="pipeline-block">
-        <h4>Next Order <small style="font-weight:normal">— not yet placed</small></h4>
-        <div class="sub">Waiting to be included in the next China order</div>
-        <table><thead><tr><th>Product</th><th>Qty</th></tr></thead><tbody>${toOrderRows}</tbody></table>
-      </div>`;
-
-    body.innerHTML = onShoreBlock + batchBlocks + toOrderBlock;
+    const [stockData, etaData] = await Promise.all([api('/api/unit-stock'), api('/api/batch-etas')]);
+    unitStock = stockData;
+    unitEtas = etaData.batchEtas || {};
+    if (!unitStock.tabs.some((t) => t.tabName === selectedStockTab)) selectedStockTab = unitStock.tabs[0]?.tabName ?? null;
+    renderStockTab();
   } catch (err) {
-    body.innerHTML = `<p>Failed to load: ${err.message}</p>`;
+    $('pipeline-body').innerHTML = `<p>Failed to load: ${esc(err.message)}</p>`;
   }
 }
 

@@ -312,6 +312,14 @@ app.post('/api/mark-batch-arrived', requireRole('ops'), async (req, res) => {
   }
 });
 
+app.get('/api/unit-stock', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callStockSheetAgent('/admin/unit-stock'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.post('/api/start-production-batch', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/start-production-batch', { method: 'POST', body: req.body }));

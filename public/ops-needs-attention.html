@@ -94,11 +94,19 @@
 
   <section class="card">
     <h3>Won deals with no stock allocated</h3>
-    <p><small>Deal reached a won stage in Pipely but isn't in the Automation Log yet — no client should be won without stock allocated to them somewhere.</small></p>
+    <p><small>Deal reached a won stage in Pipely but the customer isn't on any unit row in the sheet (matched by email or phone in the Contact column, or by name) and isn't in the Automation Log — no client should be won without stock allocated to them somewhere.</small></p>
+    <p id="unallocated-warning" class="status err"></p>
     <table id="unallocated-table">
       <thead><tr><th>Deal</th><th>Rep</th><th>Stage</th><th>Deal value</th><th>Contact</th></tr></thead>
       <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
+    <details id="name-matches" style="display:none">
+      <summary>Matched by name only — check these are the right customer</summary>
+      <table>
+        <thead><tr><th>Deal</th><th>Rep</th><th>Matched unit</th><th>Allocated To</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
   </section>
 
   <section class="card">
@@ -337,6 +345,13 @@ async function loadUnallocated() {
   try {
     const data = await api('/api/unallocated-deals');
     const deals = data.unallocated || [];
+    document.getElementById('unallocated-warning').textContent = data.unitRowsError || '';
+    const nameMatches = data.allocatedByNameOnly || [];
+    const nameBox = document.getElementById('name-matches');
+    nameBox.style.display = nameMatches.length ? '' : 'none';
+    nameBox.querySelector('summary').textContent = `Matched by name only (${nameMatches.length}) — check these are the right customer`;
+    nameBox.querySelector('tbody').innerHTML = nameMatches.map((d) => `
+      <tr><td>${d.dealName}</td><td>${d.rep || '—'}</td><td>${d.unitTab} · ${d.unitSku}</td><td>${d.allocatedTo}</td></tr>`).join('');
     if (!deals.length) { tbody.innerHTML = '<tr><td colspan="5">Everything won is allocated somewhere.</td></tr>'; return; }
     tbody.innerHTML = deals.map((d) => `
       <tr>
