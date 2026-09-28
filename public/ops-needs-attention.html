@@ -102,7 +102,7 @@
       <tbody><tr><td colspan="5">Loading…</td></tr></tbody>
     </table>
     <h4 style="margin-top:1.5rem">Allocate them in one go</h4>
-    <p><small>Reads each deal's product from its Xero invoice and suggests a unit: on shore if one's free, otherwise the earliest batch with a free one, otherwise Next Custom Order. Check and adjust each row, untick any you don't want, then press Allocate. Each ticked deal is logged exactly as if it was entered on Log Sale (linked to its Pipely deal) and stuck to a real unit row in the sheet.</small></p>
+    <p><small>Reads each deal's product from its Xero invoice. You pick where each one's unit actually is (On Shore, which batch, or Next Custom Order) — free counts per location are shown under each row. Untick any you don't want, then press Allocate. Each ticked deal is logged exactly as if it was entered on Log Sale (linked to its Pipely deal) and stuck to a real unit row in the sheet.</small></p>
     <button id="suggest-btn" class="secondary">Suggest allocations</button>
     <div id="suggest-body"></div>
     <details id="name-matches" style="display:none">
@@ -383,6 +383,18 @@ function batchOptions(allocation, selected) {
   return '<option value="">— pick —</option>' + batches.map((b) => `<option ${b === selected ? 'selected' : ''}>${b}</option>`).join('');
 }
 
+// Location is deliberately NOT pre-picked: existing customers may already
+// be committed to a batch (e.g. Batch 11) that the Template doesn't show
+// yet, and guessing "on shore first" would put them on the wrong stock.
+function freeHint(sku) {
+  if (!sku) return '';
+  const parts = suggestState.tabs
+    .map((t) => ({ t, p: t.products.find((p) => p.sku === sku) }))
+    .filter((x) => x.p)
+    .map((x) => `${x.t.batch || x.t.tabName}: ${x.p.available} free`);
+  return parts.length ? parts.join(' · ') : 'None of this product in any tab';
+}
+
 function depositStatusFor(stage) {
   if (/full invoice paid|complete|product to send/i.test(stage)) return 'Paid in full';
   if (/paid/i.test(stage)) return 'Deposit paid';
@@ -408,8 +420,9 @@ $('suggest-btn').addEventListener('click', async () => {
               ${s.skuConfidence === 'low' ? '<div class="status short">Size not clear on invoice — check product</div>' : ''}</td>
             <td><select class="sg-sku">${skuOpts(s.suggestedSku)}</select></td>
             <td><input type="number" class="sg-qty" min="1" value="${s.quantity}" style="width:4.5rem"></td>
-            <td><select class="sg-alloc"><option value="">— pick —</option>${ALLOCATIONS.map((a) => `<option ${a === s.suggestedAllocation ? 'selected' : ''}>${a}</option>`).join('')}</select></td>
-            <td><select class="sg-batch">${batchOptions(s.suggestedAllocation, s.suggestedBatch)}</select></td>
+            <td><select class="sg-alloc"><option value="">— pick —</option>${ALLOCATIONS.map((a) => `<option>${a}</option>`).join('')}</select>
+              <div class="notes sg-free">${freeHint(s.suggestedSku)}</div></td>
+            <td><select class="sg-batch">${batchOptions('', null)}</select></td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -422,9 +435,10 @@ $('suggest-btn').addEventListener('click', async () => {
 });
 
 document.addEventListener('change', (ev) => {
-  if (!ev.target.classList.contains('sg-alloc')) return;
-  const tr = ev.target.closest('tr');
-  tr.querySelector('.sg-batch').innerHTML = batchOptions(ev.target.value, null);
+  const tr = ev.target.closest('#suggest-table tr');
+  if (!tr) return;
+  if (ev.target.classList.contains('sg-alloc')) tr.querySelector('.sg-batch').innerHTML = batchOptions(ev.target.value, null);
+  if (ev.target.classList.contains('sg-sku')) tr.querySelector('.sg-free').textContent = freeHint(ev.target.value);
 });
 
 document.addEventListener('click', async (ev) => {
