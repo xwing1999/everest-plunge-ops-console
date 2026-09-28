@@ -104,7 +104,7 @@
 
   <section class="card">
     <h3>Batch Arrived</h3>
-    <p><small>Use when a batch lands in the warehouse. Moves every unit on "Batch N - On Water" (allocated and free) into Stock On Shore with its customer attached, removes the emptied batch tab, and flips those orders to "Ready to organise". Does not touch the In Stock count above — do that separately in the sheet.</small></p>
+    <p><small>Use when a batch lands in the warehouse. Moves every unit on "Batch N - On Water" (allocated and free) into Stock On Shore with its customer attached, removes the emptied batch tab, and flips those orders to "Ready to organise". The manual Stock Overview tab in the sheet isn't changed — update its counts separately if you still use it.</small></p>
     <div class="inline-form">
       <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
       <button id="mark-arrived-btn">Mark batch arrived</button>
@@ -114,7 +114,7 @@
 
   <section class="card">
     <h3>Products To Order</h3>
-    <p><small>Every "Next Custom Order" deal not yet marked ordered, grouped by SKU — the live shopping list for the next China order. The "Stock shortfall" column is a separate signal (more reserved across batch columns than physically in stock) — may or may not overlap with the logged quantity, verify before ordering.</small></p>
+    <p><small>Every "Next Custom Order" deal not yet in production, grouped by SKU — the live shopping list for the next China order. When the order is placed, use <strong>Start Production Batch</strong> above: it moves these customers onto the new batch's units. The "Stock shortfall" column comes from the manual Stock Overview tab — verify before ordering.</small></p>
     <button id="refresh-to-order" class="secondary outline">Refresh</button>
     <table id="to-order-table">
       <thead>
@@ -122,13 +122,6 @@
       </thead>
       <tbody><tr><td colspan="6">Loading…</td></tr></tbody>
     </table>
-  </section>
-
-  <section class="card">
-    <h3>Batch Tabs</h3>
-    <p><small>Read-only mirror of the real batch tabs in the spreadsheet — clean allocation view, exactly what's actually in the sheet. Nothing here is editable; fix client details directly in the sheet if something's wrong.</small></p>
-    <button id="refresh-btn" class="secondary outline">Refresh</button>
-    <div id="batches-body">Loading…</div>
   </section>
 
 </main>
@@ -264,7 +257,11 @@ async function loadPipeline() {
   }
 }
 
-async function loadBatches() {
+// "Batch Tabs" section removed 2026-09-28 — it mirrored legacy "BATCH N"
+// tabs that don't exist in the Template; the stock tabs above replace it.
+function loadBatches() {}
+
+async function loadBatchesLegacy() {
   const body = $('batches-body');
   try {
     const [batchesData, etaData] = await Promise.all([api('/api/batches'), api('/api/batch-etas')]);
@@ -313,7 +310,6 @@ async function loadBatches() {
   }
 }
 
-$('refresh-btn').addEventListener('click', loadBatches);
 
 async function loadBatchEtas() {
   const tbody = document.querySelector('#batch-eta-table tbody');
@@ -454,7 +450,7 @@ async function loadProductsToOrder() {
         <td>${p.sku}</td><td>${p.product}</td><td><strong>${p.totalQuantity}</strong></td>
         <td>${p.orderIds.join(', ')}</td>
         <td>${p.stockOverviewShortfall ? `<span class="status err">${p.stockOverviewShortfall}</span>` : '—'}</td>
-        <td>${p.orderIds.length ? `<button class="mark-ordered" data-orders="${p.orderIds.join(',')}">Mark ordered</button>` : '<span style="color:var(--pico-muted-color)">No logged orders to mark</span>'}</td>
+        <td><span style="color:var(--pico-muted-color)">Use Start Production Batch</span></td>
       </tr>`).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6">Failed to load: ${err.message}</td></tr>`;

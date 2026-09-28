@@ -457,6 +457,9 @@ document.addEventListener('click', async (ev) => {
   for (const tr of rows) {
     const s = suggestState.rows[Number(tr.dataset.i)];
     result.textContent = `Allocating ${lines.length + 1} of ${rows.length}…`;
+    // Spaced out: each allocation is ~7 Google Sheets calls, and Google
+    // caps reads at ~60/minute — firing all 19 back to back would hit it.
+    if (lines.length) await new Promise((r) => setTimeout(r, 4000));
     try {
       const data = await api('/api/log-sold-deal', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

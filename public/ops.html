@@ -113,13 +113,14 @@
       <div class="grid">
         <label>Allocation
           <select id="edit-allocation">
+            <option value="">— not allocated —</option>
             <option value="On Shore">On Shore — ships now</option>
             <option value="On Water">On Water — incoming batch</option>
             <option value="In Production">In Production — ordered, not yet shipped</option>
             <option value="Next Custom Order">Next Custom Order — not yet ordered</option>
           </select>
         </label>
-        <label>Batch reference <small>(if On Water)</small>
+        <label>Batch reference <small>(needed for On Water or In Production)</small>
           <input type="text" id="edit-batchReference" placeholder="e.g. Batch 12">
         </label>
       </div>
@@ -279,7 +280,7 @@ function openEditDialog(orderId) {
   $('edit-deliveryAddress').value = e['Delivery Address'] || '';
   $('edit-dealValue').value = e['Deal Value'] || '';
   $('edit-depositStatus').value = e['Deposit Status'] || 'Not yet invoiced';
-  $('edit-allocation').value = e['Allocation'] || 'On Shore';
+  $('edit-allocation').value = e['Allocation'] || '';
   $('edit-batchReference').value = e['Batch Reference'] || '';
   $('edit-expectedDate').value = e['Expected Date'] || '';
   $('edit-shipTargetDate').value = e['Ship Target Date'] || '';

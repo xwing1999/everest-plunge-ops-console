@@ -28,7 +28,7 @@
 <main class="container">
 
   <h3>Log a Sold Deal</h3>
-  <p><small>Adds a new order to the Automation Log — this is what makes it show up on the Dashboard, Batches, and every cross-check on Needs Attention.</small></p>
+  <p><small>Adds a new order to the Automation Log — and sticks the customer to a real unit row in the Stock &amp; Allocation Template. This is what makes it show up on Deals, Stock, and every cross-check on Needs Attention.</small></p>
   <form id="deal-form">
     <label>Pipely deal <small>(won deals with no stock yet — picking one fills in the customer and links this entry to the deal)</small>
       <select id="pipelyDeal"><option value="">— loading won deals —</option></select>
@@ -114,10 +114,20 @@ async function api(path, options) {
 async function loadStockOptions() {
   const skuSelect = $('sku');
   try {
-    const data = await api('/api/stock-overview');
-    const products = data.products || [];
+    // Free counts from the unit rows (same source as the Stock page and the
+    // unit claim), not the manual Stock Overview tab (audit 2026-09-28).
+    const [overview, units] = await Promise.all([api('/api/stock-overview').catch(() => ({ products: [] })), api('/api/unit-stock')]);
+    const bySku = new Map();
+    for (const p of overview.products || []) bySku.set(p.sku, { sku: p.sku, name: `${p.productName} (${p.modelSize})`, shore: 0, incoming: 0 });
+    for (const t of units.tabs || []) for (const p of t.products) {
+      if (!bySku.has(p.sku)) bySku.set(p.sku, { sku: p.sku, name: `${p.product} (${p.modelSize})`, shore: 0, incoming: 0 });
+      const row = bySku.get(p.sku);
+      if (t.stage === 'On Shore') row.shore += p.available;
+      else if (t.stage !== 'Next Custom Order') row.incoming += p.available;
+    }
     skuSelect.innerHTML = '<option value="">— select a product —</option>' +
-      products.map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} (${p.modelSize}) — ${p.balance} available</option>`).join('') +
+      [...bySku.values()].sort((a, b) => a.sku.localeCompare(b.sku)).map((p) =>
+        `<option value="${p.sku}">${p.sku} — ${p.name} — ${p.shore} free on shore${p.incoming ? `, ${p.incoming} free incoming` : ''}</option>`).join('') +
       '<option value="__other__">Other / not listed</option>';
   } catch (err) {
     skuSelect.innerHTML = `<option value="">Failed to load stock: ${err.message}</option>`;

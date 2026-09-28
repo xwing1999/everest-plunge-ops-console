@@ -31,7 +31,7 @@
 
   <section>
     <h3>Completed Orders — logged through this console</h3>
-    <p><small>Orders marked sent via the Dashboard's "Book &amp; mark sent" action, since this console went live.</small></p>
+    <p><small>Orders marked sent via the Deals page's "Book &amp; mark sent" action, since this console went live.</small></p>
     <button id="refresh-logged-btn" class="secondary outline">Refresh</button>
     <table id="logged-table">
       <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Courier</th><th>Tracking #</th><th>Sent</th></tr></thead>
@@ -41,7 +41,7 @@
 
   <section>
     <h3>Delivered — historical record from the spreadsheet</h3>
-    <p><small>Read-only mirror of the sheet's own "DELIVERED FIRST ORDERS" tab — everything delivered before this console existed. Separate list from the one above; not merged, since these predate the Automation Log and aren't the same records.</small></p>
+    <p><small>Historical deliveries from before this console existed. These live in the old archived spreadsheet, not the Stock &amp; Allocation Template, so this list is empty unless a "DELIVERED FIRST ORDERS" tab is added to the Template.</small></p>
     <button id="refresh-delivered-btn" class="secondary outline">Refresh</button>
     <table id="delivered-table">
       <thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Product</th><th>Amount</th><th>Payment</th></tr></thead>
@@ -82,7 +82,7 @@ async function loadDelivered() {
   try {
     const data = await api('/api/delivered-orders');
     const entries = data.entries || [];
-    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="6">Nothing found.</td></tr>'; return; }
+    if (!entries.length) { tbody.innerHTML = `<tr><td colspan="6">${data.note || 'Nothing found.'}</td></tr>`; return; }
     tbody.innerHTML = entries.map((e) => `
       <tr>
         <td>${e.invoiceNo}</td><td>${e.invoiceDate}</td><td>${e.customerName}</td>

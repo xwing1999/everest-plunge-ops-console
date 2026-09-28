@@ -344,7 +344,9 @@ app.post('/api/mark-batch-shipped', requireRole('ops'), async (req, res) => {
   }
 });
 
-app.get('/api/products-to-order', requireRole('ops'), async (_req, res) => {
+// sales role: the Sales page loads this too — ops-only made the whole Sales
+// page fail for sales logins (audit 2026-09-28).
+app.get('/api/products-to-order', requireRole('sales'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/products-to-order'));
   } catch (err) {
