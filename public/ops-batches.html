@@ -122,18 +122,28 @@
   </section>
 
   <section class="card">
-    <h3>Start Production Batch</h3>
-    <p><small>Use when an order is placed with the manufacturer. Creates a "Batch N - In Production" tab in the sheet with one row per unit ordered. Customers waiting in Next Custom Order are moved onto those rows first (oldest first, matched by SKU); the rest are free units anyone can be assigned to. Running it again for the same batch adds more units.</small></p>
+    <h3>Start a New Batch (or add to one)</h3>
+    <p><small>Creates "Batch N - In Production" (ordered from the factory) or "Batch N - On Water" (already shipped), one row per unit. Waiting customers in Next Custom Order can be moved straight onto the new units. Running it again for the same batch adds more units. Rename a batch from its tab at the top of the page.</small></p>
     <div class="inline-form">
       <input type="text" id="prodBatchRef" placeholder="e.g. Batch 13">
+      <select id="prodStage" style="width:auto;margin:0">
+        <option value="In Production">In Production — ordered, not shipped</option>
+        <option value="On Water">On Water — already shipped</option>
+      </select>
+      <select id="prodPull" style="width:auto;margin:0">
+        <option value="all">Move waiting customers onto it (oldest first, by product)</option>
+        <option value="ticked">Move only the customers I tick below</option>
+        <option value="none">Don't move anyone — all units start free</option>
+      </select>
     </div>
+    <div id="prod-queue" style="display:none"></div>
     <table id="prod-lines">
       <thead><tr><th>Product</th><th>Qty</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="inline-form">
       <button id="add-prod-line" class="secondary outline">+ Add product</button>
-      <button id="start-prod-btn">Start production batch</button>
+      <button id="start-prod-btn">Create / add to batch</button>
     </div>
     <p id="prod-result"></p>
   </section>
@@ -251,7 +261,10 @@ function renderStockTab() {
   const t = tabs.find((x) => x.tabName === selectedStockTab);
   if (!t) { $('pipeline-body').innerHTML = '<p>No stock tabs found in the sheet.</p>'; return; }
 
-  const etaLine = t.batch ? `<p>${etaBadge(findEta(unitEtas, t.batch))}</p>` : '';
+  const etaLine = t.batch
+    ? `<div class="inline-form"><span>${etaBadge(findEta(unitEtas, t.batch))}</span>
+         <button id="rename-batch-btn" class="outline secondary" data-tab="${esc(t.tabName)}">Rename batch</button></div>`
+    : '';
 
   // Xavier (2026-09-28): click a product line to spread its units down the
   // page — one line per physical unit, with the customer's name beside each
@@ -388,7 +401,13 @@ $('pipeline-body').addEventListener('click', async (ev) => {
   if (b) {
     const d = b.dataset;
     const ref = { tabName: d.tab, rowNumber: Number(d.row), sku: d.sku, orderId: d.order };
-    if (b.id === 'add-any-btn') {
+    if (b.id === 'rename-batch-btn') {
+      const newName = prompt(`Rename "${d.tab}" to which batch? (e.g. Batch 14)`, '');
+      if (!newName || !/\d/.test(newName)) return;
+      await unitAction('/api/rename-batch', { tabName: d.tab, newBatchReference: newName.trim() }, 'Batch renamed.');
+      selectedStockTab = null;
+      await loadPipeline();
+    } else if (b.id === 'add-any-btn') {
       const sku = $('add-any-sku').value, n = Number($('add-any-qty').value);
       if (!sku || !Number.isInteger(n) || n < 1) return;
       if (!confirm(`Add ${n} free "${sku}" unit(s) to ${d.tab}?`)) return;
@@ -580,6 +599,21 @@ document.querySelector('#prod-lines').addEventListener('click', (ev) => {
   if (ev.target.classList.contains('remove-prod-line')) ev.target.closest('tr').remove();
 });
 
+// Waiting customers (Next Custom Order) shown as tick boxes when "only the
+// customers I tick" is chosen.
+function renderQueuePicker() {
+  const box = $('prod-queue');
+  if ($('prodPull').value !== 'ticked' || !unitStock) { box.style.display = 'none'; return; }
+  const nco = unitStock.tabs.find((t) => t.stage === 'Next Custom Order');
+  const waiting = (nco?.units || []).filter((u) => u.orderId);
+  box.style.display = '';
+  box.innerHTML = waiting.length
+    ? '<p><small>Tick who is on this batch:</small></p>' + waiting.map((u) => `
+        <label style="display:block"><input type="checkbox" class="queue-pick" value="${esc(u.orderId)}"> ${esc(u.allocatedTo)} — ${esc(u.product)} ${esc(u.modelSize)} <span class="notes">${esc(u.sku)}</span></label>`).join('')
+    : '<p><small>Nobody is waiting in Next Custom Order.</small></p>';
+}
+$('prodPull').addEventListener('change', renderQueuePicker);
+
 $('start-prod-btn').addEventListener('click', async () => {
   const result = $('prod-result');
   const batchReference = $('prodBatchRef').value.trim();
@@ -589,11 +623,18 @@ $('start-prod-btn').addEventListener('click', async () => {
   }));
   if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
   if (!items.length) { result.textContent = 'Add at least one product.'; return; }
+  const stage = $('prodStage').value, pull = $('prodPull').value;
+  const pullOrderIds = pull === 'ticked' ? [...document.querySelectorAll('.queue-pick:checked')].map((c) => c.value) : null;
+  if (pull === 'ticked' && !pullOrderIds.length) { result.textContent = 'Tick at least one customer, or pick a different option.'; return; }
+  const who = getWho();
+  if (!who) return;
+  const reason = prompt('Reason / note for this batch (logged in Stock History):', stage === 'In Production' ? 'Factory order placed' : 'Batch shipped');
+  if (reason === null) return;
   result.textContent = 'Working…';
   try {
     const data = await api('/api/start-production-batch', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ batchReference, items })
+      body: JSON.stringify({ batchReference, items, stage, pullFromQueue: pull !== 'none', pullOrderIds, who, reason })
     });
     const lines = data.summary.map((s) =>
       `${s.sku}: ${s.units} unit(s), ${s.assignedFromCustomOrders} assigned from custom orders, ${s.free} free` +
