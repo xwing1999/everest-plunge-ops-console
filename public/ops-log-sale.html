@@ -41,6 +41,9 @@
       <label>Email
         <input type="email" id="email">
       </label>
+      <label>Phone
+        <input type="tel" id="phone">
+      </label>
     </div>
     <div class="grid">
       <label>Product (SKU)*
@@ -156,6 +159,7 @@ $('pipelyDeal').addEventListener('change', () => {
   if (!d) return;
   $('customerName').value = d.dealName.replace(/^(FB|WEB|HS)\s*-\s*/i, '').replace(/\s*-\s*Appt:.*$/i, '');
   $('email').value = d.contactEmail || '';
+  $('phone').value = d.contactPhone || '';
   if (d.dealValue) $('dealValue').value = d.dealValue;
   $('source').value = 'Pipely';
 });
@@ -201,6 +205,7 @@ $('deal-form').addEventListener('submit', async (ev) => {
       body: JSON.stringify({
         customerName: $('customerName').value,
         email: $('email').value,
+        phone: $('phone').value,
         sku: skuValue,
         quantity: Number($('quantity').value) || undefined,
         deliveryAddress: $('deliveryAddress').value,

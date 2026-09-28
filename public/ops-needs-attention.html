@@ -468,6 +468,7 @@ document.addEventListener('click', async (ev) => {
           externalRef: s.opportunityId,
           customerName: s.contactName || s.dealName.replace(/^(FB|WEB|HS)\s*-\s*/i, '').replace(/\s*-\s*Appt:.*$/i, ''),
           email: s.contactEmail || '',
+          phone: s.contactPhone || '',
           sku: tr.querySelector('.sg-sku').value,
           quantity: Number(tr.querySelector('.sg-qty').value) || 1,
           dealValue: s.dealValue || undefined,

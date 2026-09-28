@@ -28,6 +28,15 @@
   }
   section.card h3 { margin: 0 0 0.25rem 0; }
   section.card .count { color: var(--pico-muted-color); font-size: 0.85em; margin-bottom: 0.75rem; }
+  .notes { color: var(--pico-muted-color); font-size: 0.85em; }
+  .book-card { margin: 0 0 0.75rem 0; padding: 0.9rem 1rem; }
+  .book-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem 1.25rem; margin-bottom: 0.75rem; }
+  .lbl { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pico-muted-color); }
+  .orders-toolbar { display: flex; gap: 0.5rem; align-items: center; margin: 0.5rem 0 1rem; }
+  .orders-toolbar input { margin: 0; }
+  .orders-toolbar button { width: auto; margin: 0; }
+  table.orders td { vertical-align: top; }
+  tr.row-ready td { background: rgba(185, 28, 28, 0.06); }
 </style>
 </head>
 <body>
@@ -49,27 +58,26 @@
 
   <section class="ready-to-book">
     <h3>⚠ READY TO BOOK — Pickup &amp; Delivery from Warehouse</h3>
-    <p><small>Paid in full (or final payment received) and not yet sent — nothing left blocking these except booking the courier.</small></p>
+    <p><small>In the warehouse (On Shore) and paid in full — everything the courier booking needs is laid out below. Book it, then press "Booked &amp; sent".</small></p>
     <div id="ready-to-book-body">Loading…</div>
   </section>
 
-  <section>
-    <h3>Recent Orders</h3>
-    <p><small>Need to log a new sale? That's <a href="/ops/log-sale">Log Sale</a>. Managing a batch or deciding what to order next? That's <a href="/ops/stock">Stock</a>.</small></p>
+  <div class="orders-toolbar">
+    <input type="search" id="order-search" placeholder="Search name, phone, email, address, product, order ID…">
     <button id="refresh-log" class="secondary outline">Refresh</button>
-    <div style="overflow-x:auto">
-    <table id="log-table">
-      <thead>
-        <tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Qty</th><th>Status</th><th>Deposit</th><th>Final Payment</th><th>Ship ETA <small>(container arrival)</small></th><th>Action</th></tr>
-      </thead>
-      <tbody><tr><td colspan="9">Loading…</td></tr></tbody>
-    </table>
-    </div>
+  </div>
+
+  <section>
+    <h3>Active Jobs <small id="active-count"></small></h3>
+    <p><small>Every sold order not yet sent, oldest first. New sale? <a href="/ops/log-sale">Log Sale</a>. Where the stock is: <a href="/ops/stock">Stock</a>.</small></p>
+    <div style="overflow-x:auto" id="active-body">Loading…</div>
   </section>
 
-  <h3>Won Deals — by product</h3>
-  <p><small>Every client currently claimed against a stock item, one line per person under the product they're waiting on — read straight from this console's own Automation Log, not an editable sheet. Once an order is sent it moves to <a href="/ops/completed">Completed</a> and drops off this list.</small></p>
-  <div id="allocations-body">Loading…</div>
+  <section>
+    <h3>Completed Orders <small id="completed-count"></small></h3>
+    <p><small>Every order marked sent through this console, newest first.</small></p>
+    <div style="overflow-x:auto" id="completed-body">Loading…</div>
+  </section>
 
 </main>
 
@@ -84,6 +92,9 @@
         </label>
         <label>Email
           <input type="email" id="edit-email">
+        </label>
+        <label>Phone
+          <input type="tel" id="edit-phone">
         </label>
       </div>
       <div class="grid">
@@ -185,35 +196,132 @@ function actionForEntry(e) {
 // from the warehouse." Same paid/sent logic as actionForEntry above, just
 // filtered down and shown prominently rather than buried in the full order
 // table.
-async function loadReadyToBook() {
-  const box = $('ready-to-book-body');
+// Both conditions required, per Xavier: "once the stock is verified as in
+// the warehouse ready to book courier then it will go into the red box" —
+// paid alone isn't enough. "Ready to organise" (computed server-side by
+// deriveOrderStatus) means Allocation is "On Shore".
+function isReadyToBook(e) {
+  if (e['Order Sent Date']) return false;
+  if (e['Status'] !== 'Ready to organise') return false;
+  return e['Deposit Status'] === 'Paid in full' || e['Final Payment Status'] === 'Paid';
+}
+
+function esc(s) {
+  return (s ?? '').toString().replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function money(v) {
+  const n = Number(v);
+  return v === '' || v == null || isNaN(n) ? '—' : '$' + n.toLocaleString('en-NZ', { maximumFractionDigits: 2 });
+}
+
+function customerCell(e) {
+  return `<strong>${esc(e['Customer Name']) || '—'}</strong>
+    ${e['Phone'] ? `<div><a href="tel:${esc(e['Phone'])}">${esc(e['Phone'])}</a></div>` : ''}
+    ${e['Email'] ? `<div class="notes"><a href="mailto:${esc(e['Email'])}">${esc(e['Email'])}</a></div>` : ''}`;
+}
+
+function whereCell(e, unitTabsByOrder) {
+  const tabs = unitTabsByOrder.get(e['Order ID']);
+  const alloc = [e['Allocation'] || 'Unallocated', e['Batch Reference']].filter(Boolean).join(' · ');
+  return `${esc(alloc)}${tabs ? `<div class="notes">Unit: ${esc(tabs)}</div>` : e['Allocation'] ? '<div class="status err">Not on a unit</div>' : ''}`;
+}
+
+// Master list (2026-09-28) — Xavier: Active Jobs and Completed Orders with
+// the full deal on every line (address etc.), and a Ready to Book box with
+// everything laid out for booking once the order can be collected.
+let allEntries = [];
+let unitTabsByOrder = new Map();
+
+async function loadOrders() {
   try {
-    const data = await api('/api/automation-log');
-    // Both conditions required, per Xavier: "once the stock is verified as
-    // in the warehouse ready to book courier then it will go into the red
-    // box" — paid alone isn't enough (e.g. a full-payment order still
-    // allocated "On Water", not yet landed, shouldn't show as ready to
-    // book). "Ready to organise" (computed server-side by
-    // deriveOrderStatus) means Allocation is "On Shore" — actually
-    // sitting in the warehouse right now, not just paid for.
-    const ready = (data.entries || []).filter((e) => {
-      if (e['Order Sent Date']) return false;
-      if (e['Status'] !== 'Ready to organise') return false;
-      return e['Deposit Status'] === 'Paid in full' || e['Final Payment Status'] === 'Paid';
-    });
-    if (!ready.length) { box.innerHTML = '<p>Nothing waiting on booking right now.</p>'; return; }
-    box.innerHTML = `<table>
-      <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Delivery Address</th><th>Action</th></tr></thead>
-      <tbody>${ready.map((e) => `<tr>
-        <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
-        <td>${e['Delivery Address'] || '—'}</td>
-        <td><button class="mark-sent" data-order="${e['Order ID']}">Book &amp; mark sent…</button></td>
-      </tr>`).join('')}</tbody>
-    </table>`;
+    const [log, units] = await Promise.all([api('/api/automation-log'), api('/api/unit-stock').catch(() => ({ tabs: [] }))]);
+    allEntries = log.entries || [];
+    dealsById.clear();
+    for (const e of allEntries) dealsById.set(e['Order ID'], e);
+    unitTabsByOrder = new Map();
+    for (const t of units.tabs || []) for (const u of t.units) {
+      if (!u.orderId) continue;
+      const prev = unitTabsByOrder.get(u.orderId);
+      if (!prev || !prev.includes(t.tabName)) unitTabsByOrder.set(u.orderId, prev ? `${prev}, ${t.tabName}` : t.tabName);
+    }
+    renderOrders();
   } catch (err) {
-    box.innerHTML = `<p>Failed to load: ${err.message}</p>`;
+    for (const id of ['ready-to-book-body', 'active-body', 'completed-body']) $(id).innerHTML = `<p>Failed to load: ${esc(err.message)}</p>`;
   }
 }
+
+function matchesSearch(e, q) {
+  if (!q) return true;
+  return ['Order ID', 'Customer Name', 'Phone', 'Email', 'Delivery Address', 'Product', 'SKU', 'Batch Reference', 'Notes', 'Tracking #']
+    .some((k) => (e[k] || '').toString().toLowerCase().includes(q));
+}
+
+function renderOrders() {
+  const q = $('order-search').value.trim().toLowerCase();
+  const entries = allEntries.filter((e) => matchesSearch(e, q));
+
+  const ready = entries.filter(isReadyToBook);
+  $('ready-to-book-body').innerHTML = ready.length
+    ? ready.map((e) => `
+        <article class="book-card">
+          <div class="book-grid">
+            <div><div class="lbl">Customer</div>${customerCell(e)}</div>
+            <div><div class="lbl">Deliver to</div><strong>${esc(e['Delivery Address']) || '<span class="status err">No address — add via Edit</span>'}</strong></div>
+            <div><div class="lbl">Item</div>${esc(e['Product'] || e['SKU'])} <span class="notes">${esc(e['SKU'])}</span> × ${esc(e['Quantity'] || 1)}
+              <div class="notes">Collect from: ${esc(unitTabsByOrder.get(e['Order ID']) || 'Stock On Shore')}</div></div>
+            <div><div class="lbl">Order</div>${esc(e['Order ID'])}<div class="notes">${esc(e['Notes'])}</div></div>
+          </div>
+          <button class="mark-sent" data-order="${esc(e['Order ID'])}">Booked &amp; sent…</button>
+          <button class="edit-deal outline secondary" data-order="${esc(e['Order ID'])}">Edit</button>
+        </article>`).join('')
+    : '<p>Nothing waiting on booking right now.</p>';
+
+  const active = entries.filter((e) => !e['Order Sent Date']);
+  $('active-count').textContent = `(${active.length})`;
+  $('active-body').innerHTML = active.length ? `
+    <table class="orders">
+      <thead><tr><th>Customer</th><th>Product</th><th>Delivery address</th><th>Stock</th><th>Ship ETA</th><th>Value</th><th>Deposit</th><th>Final</th><th>Notes</th><th>Next step</th></tr></thead>
+      <tbody>${active.map((e) => `
+        <tr class="${isReadyToBook(e) ? 'row-ready' : ''}">
+          <td>${customerCell(e)}<div class="notes">${esc(e['Order ID'])}</div></td>
+          <td>${esc(e['Product'] || e['SKU']) || '—'} <span class="notes">${esc(e['SKU'])}</span><div>× ${esc(e['Quantity'] || 1)}</div></td>
+          <td>${esc(e['Delivery Address']) || '<span class="notes">—</span>'}</td>
+          <td>${whereCell(e, unitTabsByOrder)}</td>
+          <td>${shipEtaCell(e)}</td>
+          <td>${money(e['Deal Value'])}</td>
+          <td>${esc(e['Deposit Status']) || '—'}</td>
+          <td>${esc(e['Final Payment Status']) || '—'}</td>
+          <td class="notes">${esc(e['Notes'])}</td>
+          <td>${actionForEntry(e)} <button class="edit-deal outline secondary" data-order="${esc(e['Order ID'])}">Edit</button></td>
+        </tr>`).join('')}</tbody>
+    </table>` : '<p>No active jobs.</p>';
+
+  const done = entries.filter((e) => e['Order Sent Date'])
+    .sort((a, b) => String(b['Order Sent Date']).localeCompare(String(a['Order Sent Date'])));
+  $('completed-count').textContent = `(${done.length})`;
+  $('completed-body').innerHTML = done.length ? `
+    <table class="orders">
+      <thead><tr><th>Sent</th><th>Customer</th><th>Product</th><th>Delivery address</th><th>Courier</th><th>Tracking #</th><th>Value</th><th>Payment</th><th>Notes</th><th></th></tr></thead>
+      <tbody>${done.map((e) => `
+        <tr>
+          <td>${esc(e['Order Sent Date'])}</td>
+          <td>${customerCell(e)}<div class="notes">${esc(e['Order ID'])}</div></td>
+          <td>${esc(e['Product'] || e['SKU'])} <span class="notes">${esc(e['SKU'])}</span><div>× ${esc(e['Quantity'] || 1)}</div></td>
+          <td>${esc(e['Delivery Address']) || '—'}</td>
+          <td>${esc(e['Courier']) || '—'}</td>
+          <td>${esc(e['Tracking #']) || '—'}</td>
+          <td>${money(e['Deal Value'])}</td>
+          <td>${esc(e['Deposit Status'] === 'Paid in full' ? 'Paid in full' : e['Final Payment Status'] || e['Deposit Status'])}</td>
+          <td class="notes">${esc(e['Notes'])}</td>
+          <td><button class="edit-deal outline secondary" data-order="${esc(e['Order ID'])}">Edit</button></td>
+        </tr>`).join('')}</tbody>
+    </table>` : '<p>No completed orders yet.</p>';
+}
+
+// Kept as names other code already calls (edit dialog, action buttons).
+const loadReadyToBook = () => {};
+const loadAllocations = () => {};
 
 // Countdown to a container's arrival — mirrors pipely-xero-agent's
 // daysUntil() server-side, which is what actually decides when the final
@@ -247,25 +355,7 @@ function shipEtaCell(e) {
 
 const dealsById = new Map(); // Order ID -> entry, kept fresh on every load so Edit can pre-fill without a second fetch
 
-async function loadAutomationLog() {
-  const tbody = document.querySelector('#log-table tbody');
-  try {
-    const data = await api('/api/automation-log');
-    const entries = (data.entries || []).slice().reverse();
-    dealsById.clear();
-    for (const e of data.entries || []) dealsById.set(e['Order ID'], e);
-    if (!entries.length) { tbody.innerHTML = '<tr><td colspan="9">No orders logged yet.</td></tr>'; return; }
-    tbody.innerHTML = entries.map((e) => `<tr>
-        <td>${e['Order ID']}</td><td>${e['Customer Name']}</td><td>${e['Product'] || e['SKU']}</td>
-        <td>${e['Quantity']}</td><td>${e['Status'] || ''}</td>
-        <td>${e['Deposit Status']}</td><td>${e['Final Payment Status'] || '—'}</td>
-        <td>${shipEtaCell(e)}</td>
-        <td>${actionForEntry(e)} <button class="edit-deal outline secondary" data-order="${e['Order ID']}">Edit</button></td>
-      </tr>`).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9">Failed to load: ${err.message}</td></tr>`;
-  }
-}
+const loadAutomationLog = () => loadOrders();
 
 // Shared by #log-table and #ready-to-book-body — same order actions,
 // two different places they can be triggered from.
@@ -275,6 +365,7 @@ function openEditDialog(orderId) {
   $('edit-order-id').textContent = orderId;
   $('edit-customerName').value = e['Customer Name'] || '';
   $('edit-email').value = e['Email'] || '';
+  $('edit-phone').value = e['Phone'] || '';
   $('edit-sku').value = e['SKU'] || '';
   $('edit-quantity').value = e['Quantity'] || '';
   $('edit-deliveryAddress').value = e['Delivery Address'] || '';
@@ -305,6 +396,7 @@ $('edit-form').addEventListener('submit', async (ev) => {
         orderId,
         customerName: $('edit-customerName').value,
         email: $('edit-email').value,
+        phone: $('edit-phone').value,
         sku: $('edit-sku').value,
         quantity: $('edit-quantity').value,
         deliveryAddress: $('edit-deliveryAddress').value,
@@ -372,59 +464,11 @@ async function handleOrderActionClick(ev) {
   }
 }
 
-document.querySelector('#log-table').addEventListener('click', handleOrderActionClick);
-$('ready-to-book-body').addEventListener('click', handleOrderActionClick);
+for (const id of ['ready-to-book-body', 'active-body', 'completed-body']) $(id).addEventListener('click', handleOrderActionClick);
+$('refresh-log').addEventListener('click', loadOrders);
+$('order-search').addEventListener('input', renderOrders);
 
-$('refresh-log').addEventListener('click', loadAutomationLog);
-
-// Won Deals by product — merged in from the old standalone Allocations
-// page (2026-09-20 nav consolidation: 9 tabs down to 5, grouped by what
-// staff actually do rather than by data source).
-async function loadAllocations() {
-  const body = $('allocations-body');
-  try {
-    const data = await api('/api/automation-log');
-    const entries = (data.entries || []).filter((e) => !e['Order Sent Date']);
-    if (!entries.length) { body.innerHTML = '<p>Nothing currently allocated — everything logged has already shipped.</p>'; return; }
-
-    const byProduct = new Map();
-    for (const e of entries) {
-      const key = e['Product'] || e['SKU'] || '(no product set)';
-      if (!byProduct.has(key)) byProduct.set(key, []);
-      byProduct.get(key).push(e);
-    }
-
-    const productNames = [...byProduct.keys()].sort();
-    body.innerHTML = productNames.map((product) => {
-      const rows = byProduct.get(product);
-      const rowsHtml = rows.map((e) => {
-        const statusClass = e['Status'] === 'Unallocated' ? 'status err'
-          : e['Status'] === 'Ready to organise' ? 'status ok' : 'status short';
-        return `
-          <tr>
-            <td>${e['Customer Name'] || '—'}</td><td>${e['Order ID'] || '—'}</td><td>${e['Quantity'] || 1}</td>
-            <td class="${statusClass}">${e['Status']}${e['Batch Reference'] ? ` (${e['Batch Reference']})` : ''}</td>
-            <td>${e['Deposit Status'] || '—'}</td><td>${e['Final Payment Status'] || '—'}</td>
-          </tr>`;
-      }).join('');
-      return `
-        <section class="card">
-          <h3>${product}</h3>
-          <div class="count">${rows.length} client(s) waiting on this item</div>
-          <table>
-            <thead><tr><th>Customer</th><th>Order ID</th><th>Qty</th><th>Status</th><th>Deposit</th><th>Final Payment</th></tr></thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
-        </section>`;
-    }).join('');
-  } catch (err) {
-    body.innerHTML = `<p>Failed to load: ${err.message}</p>`;
-  }
-}
-
-loadAutomationLog();
-loadReadyToBook();
-loadAllocations();
+loadOrders();
 </script>
 </body>
 </html>
