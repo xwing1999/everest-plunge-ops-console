@@ -320,6 +320,17 @@ app.get('/api/suggest-allocations', requireRole('ops'), async (_req, res) => {
   }
 });
 
+// Manual stock / unit editing (Stock page).
+for (const route of ['add-units', 'remove-units', 'unassign-unit', 'assign-unit', 'update-unit']) {
+  app.post(`/api/${route}`, requireRole('ops'), async (req, res) => {
+    try {
+      res.json(await callStockSheetAgent(`/admin/${route}`, { method: 'POST', body: req.body }));
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+}
+
 app.get('/api/unit-stock', requireRole('ops'), async (_req, res) => {
   try {
     res.json(await callStockSheetAgent('/admin/unit-stock'));

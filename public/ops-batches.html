@@ -43,6 +43,9 @@
   .unit-num { color: var(--pico-muted-color); min-width: 1.5rem; text-align: right; }
   .unit-who { min-width: 14rem; }
   .unit-extra { flex: 1; }
+  .unit-actions { display: flex; gap: 0.4rem; align-items: center; }
+  .unit-actions button, .unit-actions select { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0.85em; }
+  .unit-actions select { max-width: 18rem; }
   #pipeline-body table th:first-child { width: 50%; }
   .tag { display: inline-block; font-size: 0.78em; padding: 0.05rem 0.5rem; border-radius: 999px; margin-top: 0.2rem; border: 1px solid currentColor; }
   .tag.full { color: #b91c1c; }
@@ -71,7 +74,26 @@
   <p><small>Read straight from the unit rows in the spreadsheet — one row per physical sauna — so anything entered directly in the sheet shows here too. Pick a location to see what's allocated and what's free.</small></p>
   <p class="status err"><strong>Heads up:</strong> customer allocations from before the sheet switch (25 Sept) haven't been re-entered yet — batches that were already fully allocated (e.g. Batch 11) currently show units as free. Don't sell from batch "Available" numbers until each existing customer is allocated (Needs Attention → Allocate them in one go).</p>
   <div id="stock-tabs" role="group" style="flex-wrap:wrap"></div>
+  <p id="unit-msg" class="status ok"></p>
   <div id="pipeline-body">Loading…</div>
+
+  <dialog id="unit-edit">
+    <article style="max-width:480px">
+      <h3>Edit unit details</h3>
+      <p><small>Changes what's written on this unit row. To move the customer to a different unit, Unassign here and Assign them on the other unit.</small></p>
+      <label>Allocated to <input type="text" id="ue-name"></label>
+      <label>Contact <input type="text" id="ue-contact"></label>
+      <label>Status
+        <select id="ue-status">
+          <option>Needs to be sent</option>
+          <option>On hold</option>
+          <option>Available — not yet allocated</option>
+        </select>
+      </label>
+      <label>Notes <input type="text" id="ue-notes"></label>
+      <footer><button id="ue-cancel" class="secondary">Cancel</button> <button id="ue-save">Save</button></footer>
+    </article>
+  </dialog>
 
   <section class="card">
     <h3>Batch ETA (Countdown)</h3>
@@ -234,6 +256,7 @@ function renderStockTab() {
           : p.allocated === 0
             ? `<span class="tag free">All ${p.available} free</span>`
             : `<span class="tag part">${p.allocated} assigned · ${p.available} free</span>`;
+        const unitAttrs = (u) => `data-tab="${esc(t.tabName)}" data-row="${u.rowNumber}" data-sku="${esc(u.sku)}" data-order="${esc(u.orderId || '')}"`;
         const unitLines = open ? units.map((u, i) => `
           <tr class="unit-line"><td colspan="4">
             <div class="unit-row">
@@ -242,8 +265,18 @@ function renderStockTab() {
                 ? `<strong>${esc(u.allocatedTo) || '<em>(no name on row)</em>'}</strong>${u.contact ? ` <span class="notes">· ${esc(u.contact)}</span>` : ''}`
                 : '<span class="status ok">Not yet assigned</span>'}</span>
               <span class="notes unit-extra">${u.allocated ? esc(u.status) : ''}${u.notes ? ` · ${esc(u.notes)}` : ''}</span>
+              <span class="unit-actions">${u.allocated
+                ? `<button class="u-edit outline secondary" ${unitAttrs(u)}>Edit</button><button class="u-unassign outline secondary" ${unitAttrs(u)}>Unassign</button>`
+                : `<select class="u-order">${assignOptions(p.sku)}</select><button class="u-assign" ${unitAttrs(u)}>Assign</button>`}</span>
             </div>
-          </td></tr>`).join('') : '';
+          </td></tr>`).join('') + `
+          <tr class="unit-line"><td colspan="4"><div class="unit-row">
+            <span class="unit-num"></span>
+            <span class="unit-actions">
+              <button class="u-add outline" data-tab="${esc(t.tabName)}" data-sku="${esc(p.sku)}">+ Add units</button>
+              <button class="u-remove outline secondary" data-tab="${esc(t.tabName)}" data-sku="${esc(p.sku)}" ${p.available ? '' : 'disabled'}>− Remove free units</button>
+            </span>
+          </div></td></tr>` : '';
         return `
           <tr class="product-line" data-key="${esc(key)}">
             <td><span class="caret">${open ? '▾' : '▸'}</span> ${esc(p.product)} — ${esc(p.modelSize)} <small class="notes">${esc(p.sku)}</small><div>${tag}</div></td>
@@ -260,7 +293,20 @@ function renderStockTab() {
     <table>
       <thead><tr><th>Product</th><th>Total</th><th>Assigned</th><th>Available</th></tr></thead>
       <tbody>${productRows}</tbody>
-    </table>`;
+    </table>
+    <div class="inline-form">
+      <small>Add stock to ${esc(t.tabName)}:</small>
+      <select id="add-any-sku">${catalogOptions()}</select>
+      <input type="number" id="add-any-qty" min="1" value="1" style="width:5rem">
+      <button id="add-any-btn" class="outline" data-tab="${esc(t.tabName)}">Add units</button>
+    </div>`;
+}
+
+function catalogOptions() {
+  const seen = new Map();
+  for (const t of unitStock.tabs) for (const p of t.products) if (!seen.has(p.sku)) seen.set(p.sku, `${p.product} — ${p.modelSize}`);
+  return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([sku, name]) => `<option value="${esc(sku)}">${esc(sku)} — ${esc(name)}</option>`).join('');
 }
 
 const expandedProducts = new Set();
@@ -272,7 +318,62 @@ $('stock-tabs').addEventListener('click', (ev) => {
   renderStockTab();
 });
 
-$('pipeline-body').addEventListener('click', (ev) => {
+// Active deals that aren't on any unit yet — offered when assigning a free
+// unit. Same-product deals first, then everything else.
+let activeOrders = [];
+function assignOptions(sku) {
+  const onUnit = new Set(unitStock.tabs.flatMap((t) => t.units.map((u) => u.orderId)).filter(Boolean));
+  const open = activeOrders.filter((e) => !e['Order Sent Date'] && !onUnit.has(e['Order ID']));
+  const same = open.filter((e) => e['SKU'] === sku), other = open.filter((e) => e['SKU'] !== sku);
+  const opt = (e) => `<option value="${esc(e['Order ID'])}">${esc(e['Customer Name'])} — ${esc(e['Product'] || e['SKU'] || 'no product')}</option>`;
+  if (!open.length) return '<option value="">No unassigned deals</option>';
+  return '<option value="">— pick a deal —</option>' +
+    (same.length ? `<optgroup label="Same product">${same.map(opt).join('')}</optgroup>` : '') +
+    (other.length ? `<optgroup label="Other deals">${other.map(opt).join('')}</optgroup>` : '');
+}
+
+async function unitAction(path, body, okMsg) {
+  try {
+    await api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (okMsg) $('unit-msg').textContent = okMsg;
+    await loadPipeline();
+  } catch (err) {
+    alert('Failed: ' + err.message);
+  }
+}
+
+$('pipeline-body').addEventListener('click', async (ev) => {
+  const b = ev.target.closest('button');
+  if (b) {
+    const d = b.dataset;
+    const ref = { tabName: d.tab, rowNumber: Number(d.row), sku: d.sku, orderId: d.order };
+    if (b.id === 'add-any-btn') {
+      const sku = $('add-any-sku').value, n = Number($('add-any-qty').value);
+      if (!sku || !Number.isInteger(n) || n < 1) return;
+      if (!confirm(`Add ${n} free "${sku}" unit(s) to ${d.tab}?`)) return;
+      await unitAction('/api/add-units', { tabName: d.tab, sku, quantity: n }, `Added ${n} unit(s).`);
+    } else if (b.classList.contains('u-assign')) {
+      const orderId = b.parentElement.querySelector('.u-order').value;
+      if (!orderId) { alert('Pick a deal to assign first.'); return; }
+      await unitAction('/api/assign-unit', { ...ref, orderId }, 'Assigned.');
+    } else if (b.classList.contains('u-unassign')) {
+      if (!confirm('Unassign this customer from this unit? The deal stays logged and will show "Not on a unit" until it is put on another unit.')) return;
+      await unitAction('/api/unassign-unit', ref, 'Unassigned — unit is free again.');
+    } else if (b.classList.contains('u-edit')) {
+      const u = unitStock.tabs.find((t) => t.tabName === d.tab).units.find((x) => x.rowNumber === Number(d.row));
+      $('ue-name').value = u.allocatedTo || ''; $('ue-contact').value = u.contact || '';
+      $('ue-status').value = u.status || ''; $('ue-notes').value = u.notes || '';
+      $('unit-edit').dataset.ref = JSON.stringify(ref);
+      $('unit-edit').showModal();
+    } else if (b.classList.contains('u-add') || b.classList.contains('u-remove')) {
+      const adding = b.classList.contains('u-add');
+      const n = Number(prompt(`${adding ? 'Add how many' : 'Remove how many free'} "${d.sku}" units ${adding ? 'to' : 'from'} ${d.tab}?`, '1'));
+      if (!Number.isInteger(n) || n < 1) return;
+      await unitAction(adding ? '/api/add-units' : '/api/remove-units', { tabName: d.tab, sku: d.sku, quantity: n }, `${adding ? 'Added' : 'Removed'} ${n} unit(s).`);
+    }
+    return;
+  }
+  if (ev.target.closest('select')) return;
   const row = ev.target.closest('.product-line');
   if (!row) return;
   const key = row.dataset.key;
@@ -280,11 +381,20 @@ $('pipeline-body').addEventListener('click', (ev) => {
   renderStockTab();
 });
 
+$('ue-save').addEventListener('click', async (ev) => {
+  ev.preventDefault();
+  const ref = JSON.parse($('unit-edit').dataset.ref);
+  $('unit-edit').close();
+  await unitAction('/api/update-unit', { ...ref, fields: { allocatedTo: $('ue-name').value, contact: $('ue-contact').value, status: $('ue-status').value, notes: $('ue-notes').value } }, 'Saved.');
+});
+$('ue-cancel').addEventListener('click', (ev) => { ev.preventDefault(); $('unit-edit').close(); });
+
 async function loadPipeline() {
   try {
-    const [stockData, etaData] = await Promise.all([api('/api/unit-stock'), api('/api/batch-etas')]);
+    const [stockData, etaData, logData] = await Promise.all([api('/api/unit-stock'), api('/api/batch-etas'), api('/api/automation-log').catch(() => ({ entries: [] }))]);
     unitStock = stockData;
     unitEtas = etaData.batchEtas || {};
+    activeOrders = logData.entries || [];
     if (!unitStock.tabs.some((t) => t.tabName === selectedStockTab)) selectedStockTab = unitStock.tabs[0]?.tabName ?? null;
     renderStockTab();
   } catch (err) {
