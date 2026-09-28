@@ -1,0 +1,116 @@
+/* Everest Plunge brand layer for the ops console (2026-09-28).
+   Taken from everestplunge.co.nz: sky blue #00A6E6 + black + white,
+   Space Grotesk for headings/buttons, Assistant for body text, the
+   mountain-peak logo and "Reach Your Peak". Loaded after Pico so it
+   overrides Pico's colours in both light and dark mode. */
+@import url('https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  --ep-blue: #00a6e6;
+  --ep-blue-dark: #0089bf;
+  --ep-blue-soft: rgba(0, 166, 230, 0.12);
+  --ep-black: #111111;
+}
+
+:root,
+[data-theme="light"],
+[data-theme="dark"] {
+  --pico-font-family: 'Assistant', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pico-primary: var(--ep-blue);
+  --pico-primary-background: var(--ep-blue);
+  --pico-primary-border: var(--ep-blue);
+  --pico-primary-underline: rgba(0, 166, 230, 0.5);
+  --pico-primary-hover: var(--ep-blue-dark);
+  --pico-primary-hover-background: var(--ep-blue-dark);
+  --pico-primary-hover-border: var(--ep-blue-dark);
+  --pico-primary-hover-underline: var(--ep-blue-dark);
+  --pico-primary-focus: rgba(0, 166, 230, 0.35);
+  --pico-primary-inverse: #fff;
+}
+
+/* Top strip + white logo bar, the same look as the website header. */
+.ep-strip {
+  background: var(--ep-blue);
+  color: #fff;
+  text-align: center;
+  font: 700 0.7rem/1 'Space Grotesk', sans-serif;
+  letter-spacing: 0.3em;
+  padding: 0.45rem 1rem;
+  text-transform: uppercase;
+}
+body > header.container {
+  max-width: none;
+  background: #fff;
+  border-bottom: 3px solid var(--ep-blue);
+  padding: 0.35rem clamp(1rem, 3vw, 2.5rem);
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+body > header.container nav { flex-wrap: wrap; }
+.ep-logo { display: inline-flex; align-items: center; padding: 0.25rem 0 !important; }
+.ep-logo img { height: 44px; width: auto; display: block; }
+body > header.container nav a {
+  color: var(--ep-black) !important;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+body > header.container nav a:hover { color: var(--ep-blue) !important; }
+body > header.container nav a[aria-current="page"] {
+  color: var(--ep-blue) !important;
+  border-bottom-color: var(--ep-blue);
+}
+
+/* Type */
+h1, h2, h3, h4, h5, summary, th {
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.01em;
+}
+main > h3, main > section > h3, section.card > h3 {
+  border-left: 4px solid var(--ep-blue);
+  padding-left: 0.6rem;
+}
+.ready-to-book > h3 { border-left: none; padding-left: 0; }
+
+/* Controls */
+button, [role="button"], input[type="submit"] {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 4px;
+}
+section.card { border-top: 3px solid var(--ep-blue); }
+details summary::after { filter: none; }
+
+/* Stock location tabs */
+.stock-tab:not(.outline) {
+  background: var(--ep-blue) !important;
+  border-color: var(--ep-blue) !important;
+  color: #fff !important;
+}
+.stock-tab.outline { color: var(--ep-blue); border-color: var(--ep-blue); }
+
+/* Tags / accents */
+.tag.free { color: var(--ep-blue); }
+.product-line:hover td { background: var(--ep-blue-soft) !important; }
+
+/* Footer signature */
+.ep-footer {
+  text-align: center;
+  margin: 3rem 0 1rem;
+  color: var(--pico-muted-color);
+  font: 600 0.72rem 'Space Grotesk', sans-serif;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+}
+.ep-footer img { height: 22px; vertical-align: middle; margin-right: 0.5rem; opacity: 0.9; }
+
+@media (max-width: 700px) {
+  .ep-logo img { height: 34px; }
+  body > header.container nav a { font-size: 0.75rem; }
+}

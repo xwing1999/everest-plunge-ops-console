@@ -428,6 +428,9 @@ app.post('/api/create-final-invoice', requireRole('ops'), async (req, res) => {
 app.get('/', requireRole('sales'), (req, res) => {
   res.redirect(req.role === 'ops' ? '/ops' : '/sales');
 });
+// Brand assets (logo, favicon, brand.css/js) — public, nothing sensitive.
+app.use('/brand', express.static(path.join(__dirname, 'public', 'brand'), { maxAge: '1h' }));
+
 app.get('/ops', requireRole('ops'), (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'ops.html'));
 });

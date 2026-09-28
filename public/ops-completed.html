@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Everest Plunge — Completed Orders</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+<link rel="stylesheet" href="/brand/brand.css">
+<link rel="icon" type="image/png" href="/brand/favicon.png">
 <style>
   body { padding-bottom: 4rem; }
   table { font-size: 0.92em; }
@@ -13,9 +15,10 @@
 </style>
 </head>
 <body>
+<div class="ep-strip">Reach Your Peak · Operations Console</div>
 <header class="container">
   <nav>
-    <ul><li><strong>Everest Plunge — Operations Console</strong></li></ul>
+    <ul><li><a href="/ops" class="ep-logo" aria-label="Everest Plunge — Operations Console"><img src="/brand/logo.png" alt="Everest Plunge"></a></li></ul>
     <ul>
       <li><a href="/ops">Deals</a></li>
       <li><a href="/ops/log-sale">Log Sale</a></li>
@@ -99,5 +102,6 @@ $('refresh-delivered-btn').addEventListener('click', loadDelivered);
 loadLogged();
 loadDelivered();
 </script>
+<script src="/brand/brand.js"></script>
 </body>
 </html>
