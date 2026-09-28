@@ -77,6 +77,17 @@
   <p id="unit-msg" class="status ok"></p>
   <div id="pipeline-body">Loading…</div>
 
+  <section class="card">
+    <h3>Stock History</h3>
+    <p><small>Every manual stock edit — who, when, what and why. Also kept in the "📜 Stock History" tab of the spreadsheet. Latest 30 shown.</small></p>
+    <div style="overflow-x:auto">
+      <table id="history-table">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Location</th><th>SKU</th><th>Qty</th><th>Customer / Order</th><th>Reason</th></tr></thead>
+        <tbody><tr><td colspan="8">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
   <dialog id="unit-edit">
     <article style="max-width:480px">
       <h3>Edit unit details</h3>
@@ -332,13 +343,43 @@ function assignOptions(sku) {
     (other.length ? `<optgroup label="Other deals">${other.map(opt).join('')}</optgroup>` : '');
 }
 
+// Every stock edit is logged in the sheet's Stock History tab with who made
+// it and why — the server refuses edits without both.
+function getWho() {
+  let who = '';
+  try { who = localStorage.getItem('ep-who') || ''; } catch {}
+  const answer = prompt('Your name (logged in Stock History):', who);
+  if (answer === null || !answer.trim()) return null;
+  try { localStorage.setItem('ep-who', answer.trim()); } catch {}
+  return answer.trim();
+}
+
 async function unitAction(path, body, okMsg) {
+  const who = getWho();
+  if (!who) return;
+  const reason = prompt('Reason for this change (logged in Stock History):', '');
+  if (reason === null || !reason.trim()) { alert('A reason is required for every stock edit.'); return; }
   try {
-    await api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (okMsg) $('unit-msg').textContent = okMsg;
+    const data = await api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, who, reason: reason.trim() }) });
+    $('unit-msg').textContent = (okMsg || 'Done.') + (data.historyWarning ? ' ⚠ ' + data.historyWarning : '');
     await loadPipeline();
+    loadHistory();
   } catch (err) {
     alert('Failed: ' + err.message);
+  }
+}
+
+async function loadHistory() {
+  const tbody = document.querySelector('#history-table tbody');
+  try {
+    const data = await api('/api/stock-history?limit=30');
+    const rows = data.entries || [];
+    tbody.innerHTML = rows.length ? rows.map((h) => `
+      <tr><td>${esc(new Date(h['Timestamp']).toLocaleString('en-NZ'))}</td><td>${esc(h['Who'])}</td><td>${esc(h['Action'])}</td>
+      <td>${esc(h['Location'])}</td><td>${esc(h['SKU'])}</td><td>${esc(h['Quantity'])}</td><td>${esc(h['Customer / Order'])}</td>
+      <td>${esc(h['Reason'])}</td></tr>`).join('') : '<tr><td colspan="8">No stock edits yet.</td></tr>';
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8">Failed to load: ${esc(err.message)}</td></tr>`;
   }
 }
 
@@ -626,6 +667,7 @@ loadBatchEtas();
 loadProductsToOrder();
 loadPipeline();
 loadProductOptions();
+loadHistory();
 </script>
 </body>
 </html>
