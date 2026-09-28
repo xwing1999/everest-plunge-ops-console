@@ -299,6 +299,7 @@ function renderStockTab() {
             <span class="unit-actions">
               <button class="u-add outline" data-tab="${esc(t.tabName)}" data-sku="${esc(p.sku)}">+ Add units</button>
               <button class="u-remove outline secondary" data-tab="${esc(t.tabName)}" data-sku="${esc(p.sku)}" ${p.available ? '' : 'disabled'}>− Remove free units</button>
+              <button class="u-rename-product outline secondary" data-sku="${esc(p.sku)}" data-name="${esc(p.product)}" data-size="${esc(p.modelSize)}">Rename product</button>
             </span>
           </div></td></tr>` : '';
         return `
@@ -401,7 +402,13 @@ $('pipeline-body').addEventListener('click', async (ev) => {
   if (b) {
     const d = b.dataset;
     const ref = { tabName: d.tab, rowNumber: Number(d.row), sku: d.sku, orderId: d.order };
-    if (b.id === 'rename-batch-btn') {
+    if (b.classList.contains('u-rename-product')) {
+      const productName = prompt(`New product name for ${d.sku} (renames it everywhere — stock, units and deals):`, d.name);
+      if (!productName || !productName.trim()) return;
+      const modelSize = prompt('Size / model (e.g. "5-6 Person"):', d.size && d.size !== '#ERROR!' ? d.size : '');
+      if (modelSize === null) return;
+      await unitAction('/api/rename-product', { sku: d.sku, productName: productName.trim(), modelSize: modelSize.trim() }, 'Product renamed.');
+    } else if (b.id === 'rename-batch-btn') {
       const newName = prompt(`Rename "${d.tab}" to which batch? (e.g. Batch 14)`, '');
       if (!newName || !/\d/.test(newName)) return;
       await unitAction('/api/rename-batch', { tabName: d.tab, newBatchReference: newName.trim() }, 'Batch renamed.');

@@ -321,7 +321,7 @@ app.get('/api/suggest-allocations', requireRole('ops'), async (_req, res) => {
 });
 
 // Manual stock / unit editing (Stock page).
-for (const route of ['add-units', 'remove-units', 'unassign-unit', 'assign-unit', 'update-unit', 'rename-batch']) {
+for (const route of ['add-units', 'remove-units', 'unassign-unit', 'assign-unit', 'update-unit', 'rename-batch', 'rename-product']) {
   app.post(`/api/${route}`, requireRole('ops'), async (req, res) => {
     try {
       res.json(await callStockSheetAgent(`/admin/${route}`, { method: 'POST', body: req.body }));
