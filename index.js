@@ -331,6 +331,14 @@ for (const route of ['add-units', 'remove-units', 'unassign-unit', 'assign-unit'
   });
 }
 
+app.get('/api/pipely-products', requireRole('ops'), async (_req, res) => {
+  try {
+    res.json(await callPipelyXeroAgent('/admin/pipely-products'));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 app.get('/api/stock-history', requireRole('ops'), async (req, res) => {
   try {
     res.json(await callStockSheetAgent(`/admin/stock-history?limit=${encodeURIComponent(req.query.limit || 50)}`));
