@@ -74,8 +74,35 @@
   </section>
 
   <section class="card">
+    <h3>Start Production Batch</h3>
+    <p><small>Use when an order is placed with the manufacturer. Creates a "Batch N - In Production" tab in the sheet with one row per unit ordered. Customers waiting in Next Custom Order are moved onto those rows first (oldest first, matched by SKU); the rest are free units anyone can be assigned to. Running it again for the same batch adds more units.</small></p>
+    <div class="inline-form">
+      <input type="text" id="prodBatchRef" placeholder="e.g. Batch 13">
+    </div>
+    <table id="prod-lines">
+      <thead><tr><th>Product</th><th>Qty</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="inline-form">
+      <button id="add-prod-line" class="secondary outline">+ Add product</button>
+      <button id="start-prod-btn">Start production batch</button>
+    </div>
+    <p id="prod-result"></p>
+  </section>
+
+  <section class="card">
+    <h3>Batch Shipped</h3>
+    <p><small>Use when a batch leaves the factory. Renames "Batch N - In Production" to "Batch N - On Water" — every unit and every customer on it stays exactly as is — and flips those orders to On Water.</small></p>
+    <div class="inline-form">
+      <input type="text" id="shippedBatchRef" placeholder="e.g. Batch 13">
+      <button id="mark-shipped-btn">Mark batch shipped</button>
+    </div>
+    <p id="shipped-result"></p>
+  </section>
+
+  <section class="card">
     <h3>Batch Arrived</h3>
-    <p><small>Flips every order allocated "On Water" against this batch to "Ready to organise". Does not touch the In Stock count above — do that separately in the sheet.</small></p>
+    <p><small>Use when a batch lands in the warehouse. Moves every unit on "Batch N - On Water" (allocated and free) into Stock On Shore with its customer attached, removes the emptied batch tab, and flips those orders to "Ready to organise". Does not touch the In Stock count above — do that separately in the sheet.</small></p>
     <div class="inline-form">
       <input type="text" id="arrivedBatchRef" placeholder="e.g. Batch 12">
       <button id="mark-arrived-btn">Mark batch arrived</button>
@@ -304,9 +331,84 @@ $('mark-arrived-btn').addEventListener('click', async () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batchReference })
     });
-    result.textContent = data.flippedCount
+    const unitsNote = data.tabRemoved
+      ? `Moved ${data.unitsMoved} unit(s) from "${data.tabRemoved}" into Stock On Shore. `
+      : 'No On Water tab found for that batch — no units moved. ';
+    result.textContent = unitsNote + (data.flippedCount
       ? `Flipped ${data.flippedCount} order(s) to "Ready to organise": ${data.flipped.map((f) => f.orderId).join(', ')}`
-      : 'No orders were waiting on that batch reference.';
+      : 'No orders were waiting on that batch reference.');
+    loadBatches();
+    loadPipeline();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+let productOptions = '';
+async function loadProductOptions() {
+  try {
+    const data = await api('/api/stock-overview');
+    productOptions = (data.products || [])
+      .map((p) => `<option value="${p.sku}">${p.sku} — ${p.productName} ${p.modelSize || ''}</option>`).join('');
+  } catch (err) {
+    productOptions = '';
+    $('prod-result').textContent = 'Could not load products: ' + err.message;
+  }
+  if (!document.querySelector('#prod-lines tbody').children.length) addProdLine();
+}
+
+function addProdLine() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="prod-sku">${productOptions}</select></td>
+    <td><input type="number" class="prod-qty" min="1" step="1" value="1" style="width:6rem"></td>
+    <td><button class="secondary outline remove-prod-line">Remove</button></td>`;
+  document.querySelector('#prod-lines tbody').appendChild(tr);
+}
+
+$('add-prod-line').addEventListener('click', addProdLine);
+document.querySelector('#prod-lines').addEventListener('click', (ev) => {
+  if (ev.target.classList.contains('remove-prod-line')) ev.target.closest('tr').remove();
+});
+
+$('start-prod-btn').addEventListener('click', async () => {
+  const result = $('prod-result');
+  const batchReference = $('prodBatchRef').value.trim();
+  const items = [...document.querySelectorAll('#prod-lines tbody tr')].map((tr) => ({
+    sku: tr.querySelector('.prod-sku').value,
+    quantity: Number(tr.querySelector('.prod-qty').value)
+  }));
+  if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
+  if (!items.length) { result.textContent = 'Add at least one product.'; return; }
+  result.textContent = 'Working…';
+  try {
+    const data = await api('/api/start-production-batch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference, items })
+    });
+    const lines = data.summary.map((s) =>
+      `${s.sku}: ${s.units} unit(s), ${s.assignedFromCustomOrders} assigned from custom orders, ${s.free} free` +
+      (s.stillWaitingInNextCustomOrder ? ` — ${s.stillWaitingInNextCustomOrder} customer unit(s) still waiting in Next Custom Order` : ''));
+    result.innerHTML = `Added to "${data.tabName}".<br>${lines.join('<br>')}` +
+      (data.splitOrders.length ? `<br><span class="status short">Split across stages (some units still in Next Custom Order): ${data.splitOrders.join(', ')}</span>` : '');
+    loadProductsToOrder();
+    loadPipeline();
+  } catch (err) {
+    result.textContent = 'Failed: ' + err.message;
+  }
+});
+
+$('mark-shipped-btn').addEventListener('click', async () => {
+  const result = $('shipped-result');
+  const batchReference = $('shippedBatchRef').value.trim();
+  if (!batchReference) { result.textContent = 'Enter a batch reference first.'; return; }
+  result.textContent = 'Working…';
+  try {
+    const data = await api('/api/mark-batch-shipped', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batchReference })
+    });
+    result.textContent = `Now "${data.tabName}". Flipped ${data.flippedCount} order(s) to On Water.`;
     loadBatches();
     loadPipeline();
   } catch (err) {
@@ -355,6 +457,7 @@ loadBatches();
 loadBatchEtas();
 loadProductsToOrder();
 loadPipeline();
+loadProductOptions();
 </script>
 </body>
 </html>

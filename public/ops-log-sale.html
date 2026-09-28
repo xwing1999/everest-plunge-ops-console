@@ -143,7 +143,11 @@ $('deal-form').addEventListener('submit', async (ev) => {
         notes: $('notes').value
       })
     });
-    result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}`;
+    const claim = data.unitClaim;
+    const claimNote = !claim ? ''
+      : claim.claimed ? ` Linked ${claim.claimedCount} of ${claim.requested} unit(s) in "${claim.tabName}".${claim.reason ? ` ${claim.reason}` : ''}`
+      : ` Not linked to a unit: ${claim.reason}`;
+    result.textContent = `Logged as ${data.orderId} — ${data.stockCheck}.${claimNote}`;
     $('deal-form').reset();
     loadStockOptions();
   } catch (err) {

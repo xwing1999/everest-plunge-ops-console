@@ -319,12 +319,14 @@ $('edit-form').addEventListener('submit', async (ev) => {
     });
     const claim = data.unitClaim;
     let claimNote = '';
-    if (claim) claimNote = claim.claimed ? ` Linked to a unit in "${claim.tabName}".` : ` (${claim.reason})`;
+    if (claim) claimNote = claim.claimed
+      ? ` Linked ${claim.claimedCount} of ${claim.requested} unit(s) in "${claim.tabName}".${claim.reason ? ` ${claim.reason}` : ''}`
+      : ` (${claim.reason})`;
     result.textContent = `Saved.${claimNote}`;
     await loadAutomationLog();
     await loadReadyToBook();
     await loadAllocations();
-    setTimeout(() => $('edit-dialog').close(), claim && !claim.claimed ? 2500 : 700);
+    setTimeout(() => $('edit-dialog').close(), claim && (!claim.claimed || claim.reason) ? 3500 : 700);
   } catch (err) {
     result.textContent = 'Failed: ' + err.message;
   }
