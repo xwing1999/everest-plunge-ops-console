@@ -39,7 +39,11 @@
   .product-line:hover td { background: var(--pico-secondary-background, rgba(127,127,127,0.08)); }
   .caret { display: inline-block; width: 1em; color: var(--pico-muted-color); }
   .unit-line td { font-size: 0.92em; padding-top: 0.35rem; padding-bottom: 0.35rem; }
-  .unit-num { color: var(--pico-muted-color); text-align: right; width: 3rem; }
+  .unit-row { display: flex; gap: 1rem; align-items: baseline; padding-left: 1.5rem; flex-wrap: wrap; }
+  .unit-num { color: var(--pico-muted-color); min-width: 1.5rem; text-align: right; }
+  .unit-who { min-width: 14rem; }
+  .unit-extra { flex: 1; }
+  #pipeline-body table th:first-child { width: 50%; }
   .tag { display: inline-block; font-size: 0.78em; padding: 0.05rem 0.5rem; border-radius: 999px; margin-top: 0.2rem; border: 1px solid currentColor; }
   .tag.full { color: #b91c1c; }
   .tag.part { color: #b45309; }
@@ -231,13 +235,15 @@ function renderStockTab() {
             ? `<span class="tag free">All ${p.available} free</span>`
             : `<span class="tag part">${p.allocated} assigned · ${p.available} free</span>`;
         const unitLines = open ? units.map((u, i) => `
-          <tr class="unit-line">
-            <td class="unit-num">${i + 1}</td>
-            <td colspan="2">${u.allocated
-              ? `<strong>${esc(u.allocatedTo) || '<em>(no name on row)</em>'}</strong>${u.contact ? `<div class="notes">${esc(u.contact)}</div>` : ''}`
-              : '<span class="status ok">Not yet assigned</span>'}</td>
-            <td class="notes">${u.allocated ? esc(u.status) : ''}${u.notes ? `<div>${esc(u.notes)}</div>` : ''}</td>
-          </tr>`).join('') : '';
+          <tr class="unit-line"><td colspan="4">
+            <div class="unit-row">
+              <span class="unit-num">${i + 1}</span>
+              <span class="unit-who">${u.allocated
+                ? `<strong>${esc(u.allocatedTo) || '<em>(no name on row)</em>'}</strong>${u.contact ? ` <span class="notes">· ${esc(u.contact)}</span>` : ''}`
+                : '<span class="status ok">Not yet assigned</span>'}</span>
+              <span class="notes unit-extra">${u.allocated ? esc(u.status) : ''}${u.notes ? ` · ${esc(u.notes)}` : ''}</span>
+            </div>
+          </td></tr>`).join('') : '';
         return `
           <tr class="product-line" data-key="${esc(key)}">
             <td><span class="caret">${open ? '▾' : '▸'}</span> ${esc(p.product)} — ${esc(p.modelSize)} <small class="notes">${esc(p.sku)}</small><div>${tag}</div></td>
